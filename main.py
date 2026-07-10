@@ -34,20 +34,24 @@ logger = logging.getLogger('NorthBot')
 # ──────────────────────────────────────────────────────────────
 # ✨ CONFIGURAÇÃO DA IA (GOOGLE GENAI)
 # ──────────────────────────────────────────────────────────────
-from google import genai
+try:
+    from google import genai
+except ImportError:
+    genai = None
+    logger.warning("Biblioteca google-genai não instalada. IA não funcionará.")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 gemini_client = None
 
-if GEMINI_API_KEY:
+if GEMINI_API_KEY and genai:
     try:
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
         logger.info("Cliente Gemini configurado com sucesso! 🎀")
     except Exception as e:
         logger.error(f"Erro ao configurar Gemini: {e}")
 else:
-    logger.warning("Chave API Gemini não encontrada. A IA não funcionará.")
+    logger.warning("Chave API Gemini não encontrada ou biblioteca ausente. A IA não funcionará.")
 
 # ──────────────────────────────────────────────────────────────
 # 🎀 CONFIGURAÇÃO DO BOT
@@ -347,7 +351,7 @@ class ConfigPanelView(discord.ui.View):
         self.add_item(RoleConfigSelect("admin_roles", "👑 Selecione os Cargos Administrativos"))
         self.add_item(RoleConfigSelect("approved_roles", "💖 Selecione os Cargos para Membros Setados"))
         self.add_item(ChannelConfigSelect("set_logs", "📄 Selecione o Canal para os Logs de Set"))
-        self.add_item(AppointmentRoleSelect())  # Novo
+        self.add_item(AppointmentRoleSelect())
 
 # ──────────────────────────────────────────────────────────────
 # 📢 SISTEMA DE PAINEL SET (FORMULÁRIO EXATO)
@@ -377,7 +381,7 @@ class SetActionView(discord.ui.View):
                 except Exception as e:
                     logger.error(f"Erro ao dar cargos: {e}")
 
-        embed.color = 0xFF69B4 # Rosa Sucesso
+        embed.color = 0xFF69B4
         embed.title = "🌸 Solicitação de Set Aprovada"
         embed.set_footer(text=f"Aprovado por {itx.user.display_name} 🎀")
 
@@ -394,7 +398,7 @@ class SetActionView(discord.ui.View):
             return await itx.response.send_message("❌ Você não tem permissão para isso.", ephemeral=True)
 
         embed = itx.message.embeds[0]
-        embed.color = 0xFF0000 # Vermelho
+        embed.color = 0xFF0000
         embed.title = "❌ Solicitação de Set Recusada"
         embed.set_footer(text=f"Recusado por {itx.user.display_name} 💔")
 
@@ -486,6 +490,8 @@ class RatingView(discord.ui.View):
         await itx.message.edit(view=self)
 
 async def fetch_gemini_fallback(contexto: str) -> str:
+    if not GEMINI_API_KEY:
+        return None
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": contexto}]}]}
 
@@ -495,12 +501,29 @@ async def fetch_gemini_fallback(contexto: str) -> str:
                 data = await response.json()
                 if "candidates" in data and data["candidates"]:
                     return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            else:
+                logger.error(f"Fallback API error: {response.status} - {await response.text()}")
     return None
+
+async def generate_ai_response(contexto: str) -> str:
+    """Gera resposta usando os modelos Gemini, com fallback."""
+    if not gemini_client:
+        return await fetch_gemini_fallback(contexto)
+    
+    for modelo in GEMINI_MODELS:
+        try:
+            resposta = await gemini_client.aio.models.generate_content(model=modelo, contents=contexto)
+            return resposta.text.strip()
+        except Exception as e:
+            logger.warning(f"Erro no modelo {modelo}: {e}")
+            continue
+    # Fallback HTTP
+    return await fetch_gemini_fallback(contexto)
 
 # ──────────────────────────────────────────────────────────────
 # 🏥 PAINEL DE AGENDAR CONSULTA (com botão)
 # ──────────────────────────────────────────────────────────────
-APPOINTMENT_CATEGORY = 1511033527519678602  # ID da categoria para as consultas
+APPOINTMENT_CATEGORY = 1511033527519678602
 
 class AppointmentModal(discord.ui.Modal, title="📅 Agendar Consulta"):
     nome_completo = discord.ui.TextInput(
@@ -523,7 +546,6 @@ class AppointmentModal(discord.ui.Modal, title="📅 Agendar Consulta"):
     )
 
     async def on_submit(self, itx: discord.Interaction):
-        # Busca o cargo de notificação configurado
         appointment_role_id = await get_config_int("appointment_role")
         mention = ""
         if appointment_role_id:
@@ -535,18 +557,15 @@ class AppointmentModal(discord.ui.Modal, title="📅 Agendar Consulta"):
         else:
             mention = "⚠️ Cargo de notificação não configurado. Peça aos admins para configurar no /painel_config."
 
-        # Cria um canal privado na categoria de agendamentos
         overwrites = {
             itx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             itx.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, embed_links=True),
         }
-        # Adiciona permissão para o cargo de notificação, se existir
         if appointment_role_id:
             role = itx.guild.get_role(appointment_role_id)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        # Cria o canal
         channel_name = f"consulta-{self.nome_completo.value.replace(' ', '-').lower()[:30]}"
         try:
             category = itx.guild.get_channel(APPOINTMENT_CATEGORY)
@@ -563,7 +582,6 @@ class AppointmentModal(discord.ui.Modal, title="📅 Agendar Consulta"):
             logger.error(f"Erro ao criar canal de consulta: {e}")
             return await itx.response.send_message("❌ Erro ao criar o canal. Verifique as permissões do bot.", ephemeral=True)
 
-        # Envia uma mensagem no canal com os dados
         embed = discord.Embed(
             title="📋 Nova Consulta Agendada",
             description=f"**Paciente:** {self.nome_completo.value}\n**ID:** {self.identificacao.value}\n**Motivo:** {self.motivo.value}",
@@ -573,14 +591,12 @@ class AppointmentModal(discord.ui.Modal, title="📅 Agendar Consulta"):
         embed.set_footer(text=f"Solicitado por {itx.user.display_name}")
         await channel.send(content=mention, embed=embed)
 
-        # Adiciona um botão para fechar o canal
         close_view = discord.ui.View()
         close_view.add_item(CloseChannelButton(channel.id))
         await channel.send("🔒 **Para encerrar este atendimento, clique no botão abaixo.**", view=close_view)
 
         await itx.response.send_message(f"🌸 Consulta agendada! Um canal foi criado: {channel.mention}", ephemeral=True)
 
-# View com botão para abrir o modal de agendamento
 class AgendarConsultaButton(discord.ui.Button):
     def __init__(self):
         super().__init__(label="📅 Agendar Consulta", style=discord.ButtonStyle.danger, custom_id="agendar_consulta_btn")
@@ -596,7 +612,6 @@ class AgendarConsultaView(discord.ui.View):
 # ──────────────────────────────────────────────────────────────
 # 🏥 CENTRAL DE ATENDIMENTOS (5 ESPECIALIDADES)
 # ──────────────────────────────────────────────────────────────
-# IDs das categorias e cargos fornecidos
 SPECIALTIES = {
     "psicologia": {
         "category_id": 1511033530636042472,
@@ -658,17 +673,14 @@ class PatientModal(discord.ui.Modal, title="👤 Dados do Paciente"):
         if not role:
             return await itx.response.send_message("❌ Cargo não encontrado. Verifique os IDs.", ephemeral=True)
 
-        # Permissões: apenas o usuário que criou e o cargo da especialidade podem ver
         overwrites = {
             itx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             itx.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, embed_links=True),
             role: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         }
 
-        # Nome do canal: especialidade-nome-paciente
         base_name = f"{self.specialty_key}-{self.nome_paciente.value.replace(' ', '-').lower()[:20]}"
         channel_name = base_name
-        # Verifica se já existe canal com esse nome e adiciona sufixo
         existing = [c for c in category.channels if c.name == channel_name]
         if existing:
             channel_name = f"{base_name}-{len(existing)+1}"
@@ -684,7 +696,6 @@ class PatientModal(discord.ui.Modal, title="👤 Dados do Paciente"):
             logger.error(f"Erro ao criar canal de atendimento: {e}")
             return await itx.response.send_message("❌ Erro ao criar o canal.", ephemeral=True)
 
-        # Mensagem inicial
         embed = discord.Embed(
             title=f"{specialty['emoji']} Atendimento - {specialty['label']}",
             description=f"**Paciente:** {self.nome_paciente.value}\n**Solicitado por:** {itx.user.mention}\n**Descrição:** {self.descricao.value or 'Não informada'}",
@@ -694,7 +705,6 @@ class PatientModal(discord.ui.Modal, title="👤 Dados do Paciente"):
         embed.set_footer(text="Utilize o botão abaixo para encerrar o atendimento.")
         await channel.send(content=role.mention, embed=embed)
 
-        # Botão de fechar
         close_view = discord.ui.View()
         close_view.add_item(CloseChannelButton(channel.id))
         await channel.send("🔒 **Para encerrar este atendimento, clique no botão abaixo.**", view=close_view)
@@ -713,7 +723,6 @@ class CentralButton(discord.ui.Button):
         self.specialty_key = specialty_key
 
     async def callback(self, itx: discord.Interaction):
-        # Abre o modal para preencher dados do paciente
         await itx.response.send_modal(PatientModal(self.specialty_key))
 
 class CentralAtendimentosView(discord.ui.View):
@@ -728,9 +737,7 @@ class CloseChannelButton(discord.ui.Button):
         self.channel_id = channel_id
 
     async def callback(self, itx: discord.Interaction):
-        # Confirmação
         await itx.response.send_message("⚠️ Tem certeza que deseja fechar este atendimento? O canal será deletado.", ephemeral=True)
-        # Aguarda confirmação com botão
         confirm_view = discord.ui.View()
         confirm_view.add_item(ConfirmCloseButton(self.channel_id))
         await itx.followup.send("Clique em **Confirmar** para deletar o canal.", view=confirm_view, ephemeral=True)
@@ -778,7 +785,6 @@ class AnnouncementModal(discord.ui.Modal, title="📢 Criar Anúncio"):
     )
 
     async def on_submit(self, itx: discord.Interaction):
-        # Mostra um menu de seleção de cargos para mencionar
         view = discord.ui.View()
         view.add_item(AnnouncementRoleSelect(self.titulo.value, self.descricao.value, self.cor.value))
         await itx.response.send_message("👑 Selecione os cargos que deseja mencionar no anúncio:", view=view, ephemeral=True)
@@ -791,13 +797,11 @@ class AnnouncementRoleSelect(discord.ui.RoleSelect):
         self.cor_hex = cor_hex
 
     async def callback(self, itx: discord.Interaction):
-        # Converte cor
         try:
             color = int(self.cor_hex.strip("#"), 16)
         except ValueError:
             color = 0xFF69B4
 
-        # Monta o embed
         embed = discord.Embed(
             title=self.titulo,
             description=self.descricao,
@@ -806,16 +810,12 @@ class AnnouncementRoleSelect(discord.ui.RoleSelect):
         )
         embed.set_footer(text=f"Anúncio por {itx.user.display_name}")
 
-        # Menção dos cargos
         mentions = " ".join([role.mention for role in self.values]) if self.values else ""
-        # Envia no canal onde o comando foi usado
         await itx.channel.send(content=mentions, embed=embed)
-
-        # Confirma
         await itx.response.send_message("🌸 Anúncio enviado com sucesso!", ephemeral=True)
 
 # ──────────────────────────────────────────────────────────────
-# 🎀 COMANDOS DE BARRA (ADMIN E UTILITÁRIOS)
+# 🎀 COMANDOS DE BARRA
 # ──────────────────────────────────────────────────────────────
 @bot.tree.command(name="painel_config", description="[ADMIN] Abre o painel para configurar cargos e canais ⚙️")
 @app_commands.default_permissions(administrator=True)
@@ -848,6 +848,46 @@ async def cmd_painel_set(itx: discord.Interaction):
     await itx.channel.send(embed=embed, view=SetView())
     await itx.response.send_message("🎀 Painel de Set criado com sucesso neste canal!", ephemeral=True)
 
+@bot.tree.command(name="ia", description="Faça uma pergunta para a IA do NORTH (com contexto do chat)")
+@app_commands.describe(pergunta="Sua perguntinha")
+async def cmd_ia(itx: discord.Interaction, pergunta: str):
+    if not gemini_client and not GEMINI_API_KEY:
+        return await itx.response.send_message("❌ IA não configurada. Verifique a chave API.", ephemeral=True)
+
+    await itx.response.defer(ephemeral=False)
+    try:
+        channel_history = await get_channel_history(str(itx.channel_id), limit=15)
+        user_patterns = await get_user_patterns(str(itx.user.id))
+        knowledge = await get_knowledge(pergunta)
+
+        contexto = "Você é um assistente virtual super fofo e educado do Hospital NORTH. Responda de forma carinhosa, útil e objetiva.\n\n"
+        if user_patterns["topics"]:
+            contexto += f"Tópicos do usuário: {', '.join(user_patterns['topics'][-5:])}\n\n"
+        if channel_history:
+            contexto += "--- Histórico ---\n" + "".join([f"{entry[1]}\nBot:{entry[2]}\n" for entry in channel_history if entry[2]]) + "\n"
+        if knowledge:
+            contexto += "--- Base de Dados ---\n" + "".join([f"Q: {k[1]}\nA: {k[2]}\n" for k in knowledge if k[3]-k[4] >= 0]) + "\n"
+
+        contexto += f"Pergunta de {itx.user.display_name}: {pergunta}"
+
+        resposta_texto = await generate_ai_response(contexto)
+        if not resposta_texto:
+            return await itx.followup.send("❌ Falha ao conectar com a IA, me perdoe! Tente novamente mais tarde.")
+
+        resposta_texto = replace_channel_mentions(resposta_texto, itx.guild)
+        conv_id = await save_conversation(str(itx.user.id), str(itx.channel_id), pergunta, resposta_texto)
+
+        palavras = set(re.findall(r'\b[a-záéíóúâêôãõç]{4,}\b', pergunta.lower()))
+        topicos = [p for p in palavras if p not in STOPWORDS_PTBR]
+        for t in topicos[:3]: await update_user_pattern(str(itx.user.id), t)
+        await save_knowledge(pergunta, resposta_texto)
+
+        embed = discord.Embed(description=resposta_texto[:4000], color=0xFF69B4)
+        await itx.followup.send(embed=embed, view=RatingView(conv_id))
+    except Exception as e:
+        logger.error(f"Erro no comando /ia: {e}", exc_info=True)
+        await itx.followup.send("❌ Ocorreu um erro interno ao processar sua pergunta.")
+
 @bot.tree.command(name="ativar_ia", description="[ADMIN] Ativa IA no canal atual 🎀")
 @app_commands.default_permissions(administrator=True)
 async def cmd_ativar_ia(itx: discord.Interaction):
@@ -878,15 +918,8 @@ async def cmd_lembrar(itx: discord.Interaction, data_hora: str, mensagem: str):
     await db.commit()
     await itx.response.send_message(f"🌸 Lembrete marcado para **{remind_dt.strftime('%d/%m/%Y às %H:%M')}**!", ephemeral=True)
 
-# ──────────────────────────────────────────────────────────────
-# 🆕 NOVOS COMANDOS: AGENDAR CONSULTA (PAINEL), ANÚNCIO, CENTRAL DE ATENDIMENTOS
-# ──────────────────────────────────────────────────────────────
 @bot.tree.command(name="agendarconsulta", description="Envia o painel para agendar uma consulta 📅")
 async def cmd_agendarconsulta(itx: discord.Interaction):
-    """
-    Comando que envia um painel com botão para agendar consulta.
-    Ao clicar no botão, o usuário preenche o modal e um canal privado é criado.
-    """
     embed = discord.Embed(
         title="📅 Agendamento de Consultas - NORTH HOSPITAL",
         description=(
@@ -919,6 +952,55 @@ async def cmd_central_atendimentos(itx: discord.Interaction):
     await itx.channel.send(embed=embed, view=view)
     await itx.response.send_message("🌸 Painel de atendimentos enviado com sucesso!", ephemeral=True)
 
+@bot.tree.command(name="teste_ia", description="Testa a conectividade com a API da IA")
+async def cmd_teste_ia(itx: discord.Interaction):
+    if not gemini_client and not GEMINI_API_KEY:
+        return await itx.response.send_message("❌ IA não configurada. Verifique a chave API e a biblioteca.", ephemeral=True)
+    
+    await itx.response.defer(ephemeral=True)
+    try:
+        resposta = await generate_ai_response("Diga 'Olá, estou funcionando!' em português.")
+        if resposta:
+            await itx.followup.send(f"✅ IA respondeu com sucesso!\nResposta: {resposta[:200]}")
+        else:
+            await itx.followup.send("❌ A IA não retornou uma resposta válida.")
+    except Exception as e:
+        await itx.followup.send(f"❌ Erro ao testar IA: {e}")
+
+# ──────────────────────────────────────────────────────────────
+# 🚀 EVENTO ON_MESSAGE (RESPOSTA AUTOMÁTICA)
+# ──────────────────────────────────────────────────────────────
+@bot.event
+async def on_message(msg: discord.Message):
+    if msg.author.bot or msg.content.startswith(("/", "!")):
+        return await bot.process_commands(msg)
+
+    if not await is_ia_enabled(str(msg.channel.id)):
+        return await bot.process_commands(msg)
+
+    if not gemini_client and not GEMINI_API_KEY:
+        return await bot.process_commands(msg)
+
+    async with msg.channel.typing():
+        try:
+            channel_history = await get_channel_history(str(msg.channel.id), limit=10)
+            contexto = "Você é um assistente fofo do Hospital NORTH. Responda com amor, até 400 caracteres.\n\n"
+            if channel_history:
+                contexto += "\n".join([f"Msg: {entry[1]}\nBot: {entry[2]}\n" for entry in channel_history if entry[2]])
+            contexto += f"\nUsuário {msg.author.display_name}: {msg.content}"
+
+            resposta_texto = await generate_ai_response(contexto)
+            if resposta_texto:
+                resposta_texto = replace_channel_mentions(resposta_texto, msg.guild)
+                conv_id = await save_conversation(str(msg.author.id), str(msg.channel.id), msg.content, resposta_texto)
+
+                embed = discord.Embed(description=resposta_texto[:1900], color=0xFF69B4)
+                await msg.reply(embed=embed, view=RatingView(conv_id), mention_author=False)
+        except Exception as e:
+            logger.error(f"Erro on_message IA: {e}", exc_info=True)
+
+    await bot.process_commands(msg)
+
 # ──────────────────────────────────────────────────────────────
 # 🚀 INICIALIZAÇÃO
 # ──────────────────────────────────────────────────────────────
@@ -926,12 +1008,11 @@ async def cmd_central_atendimentos(itx: discord.Interaction):
 async def on_ready():
     await init_db()
 
-    # Registra as views estáticas para que os botões não parem de funcionar se o bot reiniciar
     bot.add_view(ConfigPanelView())
     bot.add_view(SetView())
     bot.add_view(SetActionView())
     bot.add_view(CentralAtendimentosView())
-    bot.add_view(AgendarConsultaView())  # nova view
+    bot.add_view(AgendarConsultaView())
 
     check_reminders.start()
     cleanup_database.start()

@@ -1,8 +1,8 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
 ║          🎀 NORTH HOSPITAL CENTER — ASSISTENTE VIRTUAL 🎀    ║
-║        IA, RECRUTAMENTO E CONFIGURAÇÃO POR PAINEL DINÂMICO   ║
-║      COMANDOS: /painel_config /painel_recrutamento /ia       ║
+║        IA, SISTEMA DE SET E CONFIGURAÇÃO POR PAINEL DINÂMICO ║
+║        COMANDOS: /painel_config /painel_set /ia              ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -325,17 +325,17 @@ class ConfigPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RoleConfigSelect("admin_roles", "👑 Selecione os Cargos Administrativos"))
-        self.add_item(RoleConfigSelect("approved_roles", "💖 Selecione os Cargos para Recrutas Aprovados"))
-        self.add_item(ChannelConfigSelect("recruit_logs", "📄 Selecione o Canal para os Logs de Recrutamento"))
+        self.add_item(RoleConfigSelect("approved_roles", "💖 Selecione os Cargos para Membros Setados"))
+        self.add_item(ChannelConfigSelect("set_logs", "📄 Selecione o Canal para os Logs de Set"))
 
 # ──────────────────────────────────────────────────────────────
-# 📢 SISTEMA DE RECRUTAMENTO
+# 📢 SISTEMA DE PAINEL SET (FORMULÁRIO EXATO)
 # ──────────────────────────────────────────────────────────────
-class RecruitActionView(discord.ui.View):
+class SetActionView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         
-    @discord.ui.button(label="🌸 Aprovar", style=discord.ButtonStyle.danger, custom_id="north_recruit_approve")
+    @discord.ui.button(label="🌸 Aprovar Set", style=discord.ButtonStyle.danger, custom_id="north_set_approve")
     async def btn_approve(self, itx: discord.Interaction, btn: discord.ui.Button):
         admin_roles = await get_config_roles("admin_roles")
         is_admin = itx.user.guild_permissions.administrator or any(r.id in admin_roles for r in itx.user.roles)
@@ -357,14 +357,14 @@ class RecruitActionView(discord.ui.View):
                     logger.error(f"Erro ao dar cargos: {e}")
         
         embed.color = 0xFF69B4 # Rosa Sucesso
-        embed.title = "🌸 Candidatura Aprovada"
+        embed.title = "🌸 Solicitação de Set Aprovada"
         embed.set_footer(text=f"Aprovado por {itx.user.display_name} 🎀")
         
         for child in self.children: child.disabled = True
         await itx.message.edit(embed=embed, view=self)
-        await itx.response.send_message("🌸 Candidato(a) aprovado(a) e os cargos foram entregues!", ephemeral=True)
+        await itx.response.send_message("🌸 Membro aprovado e cargos do Set entregues!", ephemeral=True)
 
-    @discord.ui.button(label="❌ Recusar", style=discord.ButtonStyle.danger, custom_id="north_recruit_deny")
+    @discord.ui.button(label="❌ Recusar Set", style=discord.ButtonStyle.danger, custom_id="north_set_deny")
     async def btn_deny(self, itx: discord.Interaction, btn: discord.ui.Button):
         admin_roles = await get_config_roles("admin_roles")
         is_admin = itx.user.guild_permissions.administrator or any(r.id in admin_roles for r in itx.user.roles)
@@ -374,40 +374,73 @@ class RecruitActionView(discord.ui.View):
             
         embed = itx.message.embeds[0]
         embed.color = 0xFF0000 # Vermelho
-        embed.title = "❌ Candidatura Recusada"
+        embed.title = "❌ Solicitação de Set Recusada"
         embed.set_footer(text=f"Recusado por {itx.user.display_name} 💔")
         
         for child in self.children: child.disabled = True
         await itx.message.edit(embed=embed, view=self)
-        await itx.response.send_message("❌ Candidatura recusada.", ephemeral=True)
+        await itx.response.send_message("❌ Solicitação de Set recusada.", ephemeral=True)
 
-class RecruitModal(discord.ui.Modal, title="📢 Formulário de Recrutamento 🎀"):
-    mensagem = discord.ui.TextInput(label="Sua experiência e motivo", style=discord.TextStyle.paragraph, required=True, placeholder="Descreva sua experiência, disponibilidade...")
+class SetModal(discord.ui.Modal, title="📝 Formulário de Registro"):
+    nome_completo = discord.ui.TextInput(
+        label="Nome completo", 
+        placeholder="Digite seu nome", 
+        style=discord.TextStyle.short, 
+        required=True
+    )
+    passaporte = discord.ui.TextInput(
+        label="Passaporte", 
+        placeholder="Número do passaporte", 
+        style=discord.TextStyle.short, 
+        required=True
+    )
+    motivo_registro = discord.ui.TextInput(
+        label="Motivo do registro", 
+        placeholder="Descreva o motivo", 
+        style=discord.TextStyle.paragraph, 
+        required=True
+    )
+    numero_contato = discord.ui.TextInput(
+        label="Número de contato", 
+        placeholder="Telefone/WhatsApp", 
+        style=discord.TextStyle.short, 
+        required=True
+    )
+    cargo_desejado = discord.ui.TextInput(
+        label="Cargo desejado", 
+        placeholder="Ex: Enfermeiro, Médico, etc.", 
+        style=discord.TextStyle.short, 
+        required=True
+    )
     
     async def on_submit(self, itx: discord.Interaction):
-        log_ch_id = await get_config_channel("recruit_logs")
+        log_ch_id = await get_config_channel("set_logs")
         if not log_ch_id:
-            return await itx.response.send_message("❌ O canal de logs de recrutamento ainda não foi configurado pelos admins! Peça para eles usarem o `/painel_config`.", ephemeral=True)
+            return await itx.response.send_message("❌ O canal de logs de Set ainda não foi configurado pelos admins! Peça para eles usarem o `/painel_config`.", ephemeral=True)
 
         log_channel = itx.guild.get_channel(log_ch_id)
         if log_channel:
-            embed = discord.Embed(title="📄 Nova Candidatura Recebida 🎀", color=0xFFB6C1, timestamp=now_br())
-            embed.add_field(name="Candidato(a)", value=f"{itx.user.mention} (`{itx.user.name}`)", inline=False)
-            embed.add_field(name="Apresentação", value=self.mensagem.value, inline=False)
+            embed = discord.Embed(title="📄 Nova Solicitação de Set 🎀", color=0xFFB6C1, timestamp=now_br())
+            embed.add_field(name="Usuário Discord", value=f"{itx.user.mention} (`{itx.user.name}`)", inline=False)
+            embed.add_field(name="Nome Completo", value=self.nome_completo.value, inline=True)
+            embed.add_field(name="Passaporte", value=self.passaporte.value, inline=True)
+            embed.add_field(name="Contato", value=self.numero_contato.value, inline=True)
+            embed.add_field(name="Cargo Desejado", value=self.cargo_desejado.value, inline=True)
+            embed.add_field(name="Motivo do Registro", value=self.motivo_registro.value, inline=False)
             embed.set_thumbnail(url=str(itx.user.display_avatar.url))
             
-            await log_channel.send(embed=embed, view=RecruitActionView())
-            await itx.response.send_message("🌸 Sua candidatura foi enviada e será analisada com muito amor pela diretoria!", ephemeral=True)
+            await log_channel.send(embed=embed, view=SetActionView())
+            await itx.response.send_message("🌸 Seu formulário de Set foi enviado e será analisado com muito amor pela diretoria!", ephemeral=True)
         else:
             await itx.response.send_message("❌ O canal de logs configurado não foi encontrado.", ephemeral=True)
 
-class RecruitView(discord.ui.View):
+class SetView(discord.ui.View):
     def __init__(self): 
         super().__init__(timeout=None)
         
-    @discord.ui.button(label="📢 Fazer Recrutamento", style=discord.ButtonStyle.danger, custom_id="north_recruit_btn")
-    async def recruit_btn(self, itx: discord.Interaction, _: discord.ui.Button):
-        await itx.response.send_modal(RecruitModal())
+    @discord.ui.button(label="📝 Solicitar Set", style=discord.ButtonStyle.danger, custom_id="north_set_btn")
+    async def set_btn(self, itx: discord.Interaction, _: discord.ui.Button):
+        await itx.response.send_modal(SetModal())
 
 # ──────────────────────────────────────────────────────────────
 # ✨ SISTEMA DA IA (MENSAGENS) E COMANDOS
@@ -535,29 +568,29 @@ async def cmd_painel_config(itx: discord.Interaction):
     embed = discord.Embed(
         title="⚙️ Painel de Configuração do NORTH 🎀",
         description="Utilize os menus abaixo para configurar como o bot vai funcionar no seu servidor.\n\n"
-                    "👑 **Cargos Administrativos:** Quem pode aprovar recrutamentos.\n"
-                    "💖 **Cargos Aprovados:** Quais cargos os membros ganham ao serem aprovados.\n"
-                    "📄 **Canal de Logs:** Onde as respostas do recrutamento serão enviadas.",
+                    "👑 **Cargos Administrativos:** Quem pode aprovar solicitações de Set.\n"
+                    "💖 **Cargos Aprovados:** Quais cargos os membros ganham ao receberem o Set.\n"
+                    "📄 **Canal de Logs:** Onde as respostas do Set serão enviadas para aprovação.",
         color=0xFF1493
     )
     await itx.response.send_message(embed=embed, view=ConfigPanelView(), ephemeral=True)
 
-@bot.tree.command(name="painel_recrutamento", description="[ADMIN] Cria o painel de recrutamento neste canal 📢")
+@bot.tree.command(name="painel_set", description="[ADMIN] Cria o painel de Set (Registro) neste canal 📢")
 @app_commands.default_permissions(administrator=True)
-async def cmd_painel_recrutamento(itx: discord.Interaction):
+async def cmd_painel_set(itx: discord.Interaction):
     embed = discord.Embed(
-        title="📢 Central de Recrutamento - NORTH HOSPITAL 🎀",
+        title="📢 Central de Registros - NORTH HOSPITAL 🎀",
         description=(
-            "**Venha fazer parte da nossa incrível equipe médica!** 🌸\n\n"
-            "Para se candidatar a uma vaga no NORTH HOSPITAL, clique no botão **'Recrutamento'** abaixo.\n"
-            "Preencha o formulário informando sua experiência prévia, disponibilidade de horário e os motivos pelos quais deseja integrar nossa família.\n\n"
-            "⚠️ **Atenção:** Seja claro e objetivo. Nossa diretoria avaliará seu perfil e a aprovação será notificada com muito carinho aos responsáveis."
+            "**Faça o seu registro em nossa equipe!** 🌸\n\n"
+            "Para solicitar o seu Set no NORTH HOSPITAL, clique no botão **'📝 Solicitar Set'** abaixo.\n"
+            "Preencha o formulário com suas informações perfeitamente de acordo com o seu passaporte na cidade.\n\n"
+            "⚠️ **Atenção:** Nossa diretoria avaliará seu perfil e a aprovação será notificada aos responsáveis."
         ),
         color=0xFFB6C1
     )
     embed.set_footer(text="Diretoria NORTH HOSPITAL 💌")
-    await itx.channel.send(embed=embed, view=RecruitView())
-    await itx.response.send_message("🎀 Painel de Recrutamento criado com sucesso neste canal!", ephemeral=True)
+    await itx.channel.send(embed=embed, view=SetView())
+    await itx.response.send_message("🎀 Painel de Set criado com sucesso neste canal!", ephemeral=True)
 
 @bot.tree.command(name="ativar_ia", description="[ADMIN] Ativa IA no canal atual 🎀")
 @app_commands.default_permissions(administrator=True)
@@ -605,8 +638,8 @@ async def on_ready():
 
     # Registra as views estáticas para que os botões não parem de funcionar se o bot reiniciar
     bot.add_view(ConfigPanelView())
-    bot.add_view(RecruitView())
-    bot.add_view(RecruitActionView())
+    bot.add_view(SetView())
+    bot.add_view(SetActionView())
 
     check_reminders.start()
     cleanup_database.start()

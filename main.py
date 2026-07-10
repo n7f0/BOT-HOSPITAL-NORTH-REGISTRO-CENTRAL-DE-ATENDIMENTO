@@ -1,9 +1,9 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║          ECCO HOSPITAL CENTER — BOT DE BATE PONTO           ║
-║        COM IA, MEMÓRIA, APRENDIZADO CONTÍNUO E AVALIAÇÃO    ║
-║           COMANDOS: /ativar_ia /desativar_ia /sync          ║
-║         /lembrar (com substituição automática de canais)    ║
+║          🎀 NORTH HOSPITAL CENTER — BOT BATE PONTO 🎀        ║
+║        COM IA, MEMÓRIA, APRENDIZADO CONTÍNUO E AVALIAÇÃO     ║
+║           COMANDOS: /ativar_ia /desativar_ia /sync           ║
+║         /lembrar (com substituição automática de canais)     ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -25,17 +25,17 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 # ──────────────────────────────────────────────────────────────
-#  CONFIGURAÇÃO DE LOGGING
+# 🌸 CONFIGURAÇÃO DE LOGGING
 # ──────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(message)s',
     datefmt='%d/%m/%Y %H:%M:%S'
 )
-logger = logging.getLogger('EccoBot')
+logger = logging.getLogger('NorthBot')
 
 # ──────────────────────────────────────────────────────────────
-#  CONFIGURAÇÃO DA IA (GEMINI)
+# ✨ CONFIGURAÇÃO DA IA (GEMINI)
 # ──────────────────────────────────────────────────────────────
 warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
 import google.generativeai as genai
@@ -61,7 +61,7 @@ else:
     logger.warning("Chave API Gemini não encontrada.")
 
 # ──────────────────────────────────────────────────────────────
-#  CONFIGURAÇÃO DO BOT E CANAIS
+# 🎀 CONFIGURAÇÃO DO BOT E CANAIS
 # ──────────────────────────────────────────────────────────────
 TOKEN         = os.environ.get("DISCORD_TOKEN")
 PANEL_CHANNEL = int(os.environ.get("PANEL_CHANNEL_ID", "1515846128493658142"))
@@ -94,7 +94,7 @@ _rank_lock = asyncio.Lock()
 _last_update: float = 0.0
 
 # ──────────────────────────────────────────────────────────────
-#  GERENCIADOR DE BANCO DE DADOS
+# 💖 GERENCIADOR DE BANCO DE DADOS
 # ──────────────────────────────────────────────────────────────
 class DatabaseManager:
     def __init__(self, db_path):
@@ -194,7 +194,7 @@ async def init_db():
     await db.commit()
 
 # ──────────────────────────────────────────────────────────────
-#  FUNÇÕES AUXILIARES PARA APRENDIZADO & DB
+# 🧠 FUNÇÕES AUXILIARES PARA APRENDIZADO & DB
 # ──────────────────────────────────────────────────────────────
 async def save_conversation(user_id: str, channel_id: str, message: str, response: str = None, rating: int = 0):
     await db.execute(
@@ -266,31 +266,22 @@ async def set_ia_enabled(channel_id: str, enabled: bool):
                     (channel_id, 1 if enabled else 0))
     await db.commit()
 
-# ─── FUNÇÃO MELHORADA: SUBSTITUI NOMES DE CANAIS POR MENÇÕES ───
 def replace_channel_mentions(text: str, guild: discord.Guild) -> str:
-    """
-    Substitui nomes de canais (case insensitive) por menções <#ID>.
-    Suporta nomes com espaços e evita substituir dentro de menções existentes.
-    Exemplo: "Vamos no geral" -> "Vamos no <#123456789>"
-    """
+    """Substitui nomes de canais (case insensitive) por menções <#ID>."""
     if not guild or not text:
         return text
 
-    # Coleta todos os canais (texto, voz, categoria) e ordena por tamanho do nome (maior primeiro)
     channels = sorted(guild.channels, key=lambda c: len(c.name), reverse=True)
     
-    # Itera sobre cada canal e substitui o nome exato (case insensitive)
     for channel in channels:
-        # Escapa caracteres especiais do nome para usar em regex
         escaped_name = re.escape(channel.name)
-        # Usa lookarounds para evitar substituir dentro de menções <#...> ou <@...>
         pattern = re.compile(r'(?<![#<])' + escaped_name + r'(?![#>])', re.IGNORECASE)
         text = pattern.sub(f"<#{channel.id}>", text)
     
     return text
 
 # ──────────────────────────────────────────────────────────────
-#  TASKS — OTIMIZADAS
+# 🕒 TASKS — OTIMIZADAS
 # ──────────────────────────────────────────────────────────────
 @tasks.loop(seconds=30)
 async def check_reminders():
@@ -308,9 +299,9 @@ async def check_reminders():
         msg_processed = replace_channel_mentions(msg, guild)
 
         embed = discord.Embed(
-            title="⏰ Lembrete!",
-            description=f"Olá {user.mention}, você pediu para lembrar:\n\n**{msg_processed}**",
-            color=0xFFA500,
+            title="⏰ Lembrete Fofinho!",
+            description=f"Oiii {user.mention}, você pediu para eu te lembrar disso:\n\n**{msg_processed}**",
+            color=0xFF69B4, # Rosa 
             timestamp=datetime.datetime.now(BR_TZ)
         )
         embed.set_footer(text=f"Agendado para {remind_at}")
@@ -318,7 +309,7 @@ async def check_reminders():
             await user.send(embed=embed)
             channel = bot.get_channel(int(cid))
             if channel:
-                await channel.send(f"{user.mention} ⏰ Lembrete: {msg_processed}")
+                await channel.send(f"{user.mention} 🌸 Lembrete: {msg_processed}")
         except discord.Forbidden:
             logger.warning(f"Não foi possível enviar DM de lembrete para {user.id}.")
         except Exception as e:
@@ -335,7 +326,7 @@ async def cleanup_database():
         logger.error(f"Erro na limpeza do banco: {e}")
 
 # ──────────────────────────────────────────────────────────────
-#  FUNÇÕES AUXILIARES (Ponto e Utilidades)
+# 🛠️ FUNÇÕES AUXILIARES (Ponto e Utilidades)
 # ──────────────────────────────────────────────────────────────
 def now_br() -> datetime.datetime: return datetime.datetime.now(tz=BR_TZ)
 
@@ -386,48 +377,48 @@ async def get_rank() -> list:
     return sorted(totals.items(), key=lambda x: x[1][1], reverse=True)
 
 # ──────────────────────────────────────────────────────────────
-#  PAINÉIS EMBEDS
+# 💌 PAINÉIS EMBEDS (TEMÁTICA ROSA E VERMELHO)
 # ──────────────────────────────────────────────────────────────
 def panel_embed() -> discord.Embed:
     e = discord.Embed(
-        title="🏥 ECCO HOSPITAL CENTER",
-        description="## 📋 Sistema de Bate Ponto Eletrônico\n\nRegistre sua **entrada** e **saída** usando os botões abaixo.\n\n🟢 **Abrir Ponto** — Inicia a contagem do seu expediente\n🔴 **Fechar Ponto** — Encerra e salva o seu expediente\n\n> *Somente você verá a confirmação do seu ponto.*",
-        color=0x1565C0,
+        title="🎀 NORTH HOSPITAL CENTER 🎀",
+        description="## 💌 Sistema de Bate Ponto Eletrônico\n\nRegistre sua **entrada** e **saída** com muito carinho usando os botões abaixo.\n\n🌸 **Abrir Ponto** — Inicia a contagem do seu lindo expediente\n💖 **Fechar Ponto** — Encerra e salva o seu expediente\n\n> *Somente você verá a confirmação do seu ponto, não se preocupe!*",
+        color=0xFF69B4, # Rosa Hot Pink
     )
-    e.set_footer(text="ECCO HOSPITAL CENTER • Ponto Eletrônico")
+    e.set_footer(text="NORTH HOSPITAL CENTER • Ponto Eletrônico 🌸")
     return e
 
 def remove_panel_embed() -> discord.Embed:
     e = discord.Embed(
         title="⏱️ Administração — Gerenciamento de Horas e Bot",
         description=(
-            "**Painel Administrativo**\n"
+            "**Painel Administrativo NORTH** 🎀\n"
             "Selecione um membro no menu abaixo para ajustar ou remover horas contabilizadas indevidamente.\n\n"
             "🛠️ **Comandos Disponíveis do Bot:**\n"
-            "`/ia` - Faça uma pergunta para a IA assistente.\n"
+            "`/ia` - Faça uma perguntinha para a IA assistente.\n"
             "`/ativar_ia` - [Admin] Ativa a IA no canal atual.\n"
             "`/desativar_ia` - [Admin] Desativa a IA no canal.\n"
             "`/meu_ponto` - Consulte as suas horas trabalhadas nesta semana.\n"
             "`/lembrar` - Define um lembrete com data/hora (DD/MM/AAAA HH:MM).\n"
             "`/sync` - [Admin] Sincroniza os comandos de barra do bot."
         ),
-        color=0xE74C3C
+        color=0xFF0000 # Vermelho Intenso
     )
-    e.set_footer(text="Apenas membros autorizados podem executar alterações.")
+    e.set_footer(text="Apenas membros autorizados podem executar alterações. 💖")
     return e
 
 def recruit_panel_embed() -> discord.Embed:
     e = discord.Embed(
-        title="📢 Central de Recrutamento - ECCO HOSPITAL",
+        title="📢 Central de Recrutamento - NORTH HOSPITAL 🎀",
         description=(
-            "**Faça parte da nossa equipe médica!**\n\n"
-            "Para se candidatar a uma vaga no ECCO HOSPITAL, clique no botão **'Recrutamento'** abaixo.\n"
-            "Preencha o formulário informando sua experiência prévia, disponibilidade de horário e os motivos pelos quais deseja integrar nossa equipe.\n\n"
-            "⚠️ **Atenção:** Seja claro e objetivo. Nossa diretoria avaliará seu perfil e a aprovação será notificada aos responsáveis."
+            "**Venha fazer parte da nossa incrível equipe médica!** 🌸\n\n"
+            "Para se candidatar a uma vaga no NORTH HOSPITAL, clique no botão **'Recrutamento'** abaixo.\n"
+            "Preencha o formulário informando sua experiência prévia, disponibilidade de horário e os motivos pelos quais deseja integrar nossa família.\n\n"
+            "⚠️ **Atenção:** Seja claro e objetivo. Nossa diretoria avaliará seu perfil e a aprovação será notificada com muito carinho aos responsáveis."
         ),
-        color=0x00BFFF
+        color=0xFFB6C1 # Rosa Claro (Light Pink)
     )
-    e.set_footer(text="Diretoria ECCO HOSPITAL")
+    e.set_footer(text="Diretoria NORTH HOSPITAL 💌")
     return e
 
 async def rank_embed() -> discord.Embed:
@@ -439,25 +430,29 @@ async def rank_embed() -> discord.Embed:
     active_row = await db.fetchone("SELECT COUNT(*) FROM active")
     active_n = active_row[0] if active_row else 0
     
-    e = discord.Embed(title="🏆 RANKING SEMANAL DE HORAS", description=f"**ECCO HOSPITAL CENTER**\n📅 {ws.strftime('%d/%m')} — {we.strftime('%d/%m/%Y')}", color=0xFFD700)
+    e = discord.Embed(
+        title="✨ RANKING SEMANAL DE HORAS ✨", 
+        description=f"**NORTH HOSPITAL CENTER 🎀**\n📅 {ws.strftime('%d/%m')} — {we.strftime('%d/%m/%Y')}", 
+        color=0xFF1493 # Deep Pink
+    )
     MEDALS = ["🥇", "🥈", "🥉"]
     
     if not rank:
-        e.add_field(name="Sem Registros", value="Nenhuma hora registrada esta semana.", inline=False)
+        e.add_field(name="Sem Registros", value="Nenhuma horinha registrada esta semana ainda. 🌸", inline=False)
     else:
         page, part = "", 0
         for i, (uid, (uname, secs)) in enumerate(rank):
             prefix = MEDALS[i] if i < 3 else f"`#{i+1:>3}`"
             line = f"{prefix} **{uname}** — `{hms(secs)}`\n"
             if len(page) + len(line) > 950:
-                e.add_field(name="👥 Colaboradores" if part == 0 else f"👥 Colaboradores (pt.{part + 1})", value=page, inline=False)
+                e.add_field(name="💖 Colaboradores" if part == 0 else f"💖 Colaboradores (pt.{part + 1})", value=page, inline=False)
                 page, part = line, part + 1
             else: page += line
         if page:
-            e.add_field(name="👥 Colaboradores" if part == 0 else f"👥 Colaboradores (pt.{part + 1})", value=page, inline=False)
+            e.add_field(name="💖 Colaboradores" if part == 0 else f"💖 Colaboradores (pt.{part + 1})", value=page, inline=False)
             
-    e.add_field(name="🟢 Em Serviço Agora", value=f"**{active_n}** colaborador(es) com ponto aberto", inline=False)
-    e.set_footer(text=f"Atualizado em {now.strftime('%d/%m/%Y às %H:%M:%S')} • ECCO HOSPITAL CENTER")
+    e.add_field(name="🌸 Em Serviço Agora", value=f"**{active_n}** colaborador(es) brilhando no plantão!", inline=False)
+    e.set_footer(text=f"Atualizado em {now.strftime('%d/%m/%Y às %H:%M:%S')} • NORTH HOSPITAL CENTER 🎀")
     return e
 
 async def refresh_rank(force: bool = False):
@@ -486,7 +481,7 @@ async def refresh_rank(force: bool = False):
         except Exception as e: logger.error(f"Erro ao enviar painel de rank: {e}")
 
 # ──────────────────────────────────────────────────────────────
-#  VIEWS INTERATIVAS
+# 🎀 VIEWS INTERATIVAS
 # ──────────────────────────────────────────────────────────────
 class RatingView(discord.ui.View):
     def __init__(self, conversation_id: int, message_id: int):
@@ -494,54 +489,54 @@ class RatingView(discord.ui.View):
         self.conversation_id = conversation_id
         self.message_id = message_id
 
-    @discord.ui.button(label="👍", style=discord.ButtonStyle.success, custom_id="rate_up")
+    @discord.ui.button(label="👍 Amei!", style=discord.ButtonStyle.danger, custom_id="rate_up")
     async def rate_up(self, itx: discord.Interaction, _: discord.ui.Button):
         await rate_response(self.conversation_id, 1)
-        await itx.response.send_message("✅ Obrigado pelo feedback positivo!", ephemeral=True)
+        await itx.response.send_message("💖 Obrigada pelo feedback fofo!", ephemeral=True)
         for child in self.children: child.disabled = True
         await itx.message.edit(view=self)
 
-    @discord.ui.button(label="👎", style=discord.ButtonStyle.danger, custom_id="rate_down")
+    @discord.ui.button(label="👎 Não gostei", style=discord.ButtonStyle.danger, custom_id="rate_down")
     async def rate_down(self, itx: discord.Interaction, _: discord.ui.Button):
         await rate_response(self.conversation_id, -1)
-        await itx.response.send_message("✅ Feedback registrado! Vou melhorar.", ephemeral=True)
+        await itx.response.send_message("🌸 Feedback registrado! Prometo melhorar.", ephemeral=True)
         for child in self.children: child.disabled = True
         await itx.message.edit(view=self)
 
 class PunchView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
 
-    @discord.ui.button(label="✅  Abrir Ponto", style=discord.ButtonStyle.success, custom_id="ecco:open")
+    @discord.ui.button(label="🌸 Abrir Ponto", style=discord.ButtonStyle.danger, custom_id="north:open")
     async def open_btn(self, itx: discord.Interaction, _: discord.ui.Button):
         uid, name, now = str(itx.user.id), itx.user.display_name, now_br()
         row = await db.fetchone("SELECT open_time FROM active WHERE user_id = ?", (uid,))
         if row:
             dt = localize(datetime.datetime.fromisoformat(row[0]))
-            e = discord.Embed(title="⚠️ Ponto Já Aberto!", description=f"Você já tem um ponto aberto desde **{dt.strftime('%d/%m/%Y às %H:%M:%S')}**.\nTempo decorrido: **{hms((now - dt).total_seconds())}**\n\nPara encerrar, clique em 🔴 **Fechar Ponto**.", color=0xFFA500)
+            e = discord.Embed(title="⚠️ Ponto Já Aberto, anjo!", description=f"Você já tem um ponto aberto desde **{dt.strftime('%d/%m/%Y às %H:%M:%S')}**.\nTempo decorrido: **{hms((now - dt).total_seconds())}**\n\nPara encerrar, clique em 💖 **Fechar Ponto**.", color=0xFF69B4)
             return await itx.response.send_message(embed=e, ephemeral=True)
             
         await db.execute("INSERT OR REPLACE INTO active (user_id, user_name, open_time) VALUES (?, ?, ?)", (uid, name, now.isoformat()))
         await db.commit()
         
-        e = discord.Embed(title="✅ Ponto Aberto com Sucesso!", color=0x2ECC71)
-        e.add_field(name="👤 Colaborador", value=f"**{name}**", inline=True)
+        e = discord.Embed(title="🌸 Ponto Aberto com Sucesso!", color=0xFF69B4) # Rosa
+        e.add_field(name="🎀 Colaborador(a)", value=f"**{name}**", inline=True)
         e.add_field(name="🕐 Horário de Entrada", value=now.strftime("%d/%m/%Y às %H:%M:%S"), inline=True)
         e.set_thumbnail(url=str(itx.user.display_avatar.url))
         await itx.response.send_message(embed=e, ephemeral=True)
         
         lch = bot.get_channel(LOGS_CHANNEL)
         if lch:
-            le = discord.Embed(title="📥 Entrada Registrada", color=0x2ECC71, timestamp=now)
-            le.add_field(name="Colaborador", value=f"{itx.user.mention}\n`{name}`", inline=True)
+            le = discord.Embed(title="📥 Entrada Registrada 🌸", color=0xFF69B4, timestamp=now)
+            le.add_field(name="Colaborador(a)", value=f"{itx.user.mention}\n`{name}`", inline=True)
             await lch.send(embed=le)
         asyncio.create_task(refresh_rank())
 
-    @discord.ui.button(label="🔴  Fechar Ponto", style=discord.ButtonStyle.danger, custom_id="ecco:close")
+    @discord.ui.button(label="💖 Fechar Ponto", style=discord.ButtonStyle.danger, custom_id="north:close")
     async def close_btn(self, itx: discord.Interaction, _: discord.ui.Button):
         uid, name, now = str(itx.user.id), itx.user.display_name, now_br()
         row = await db.fetchone("SELECT open_time FROM active WHERE user_id = ?", (uid,))
         if not row:
-            return await itx.response.send_message(embed=discord.Embed(title="⚠️ Sem Ponto Aberto!", description="Você não tem ponto aberto.", color=0xFFA500), ephemeral=True)
+            return await itx.response.send_message(embed=discord.Embed(title="⚠️ Sem Ponto Aberto!", description="Você ainda não tem um ponto aberto flor.", color=0xFF0000), ephemeral=True)
             
         open_dt = localize(datetime.datetime.fromisoformat(row[0]))
         dur_sec = int((now - open_dt).total_seconds())
@@ -551,16 +546,16 @@ class PunchView(discord.ui.View):
         await db.execute("DELETE FROM active WHERE user_id = ?", (uid,))
         await db.commit()
         
-        e = discord.Embed(title="🔴 Ponto Fechado com Sucesso!", color=0xE74C3C)
-        e.add_field(name="👤 Colaborador", value=f"**{name}**", inline=False)
+        e = discord.Embed(title="💖 Ponto Fechado com Sucesso!", color=0xFF0000) # Vermelho
+        e.add_field(name="🎀 Colaborador(a)", value=f"**{name}**", inline=False)
         e.add_field(name="⏱️ Duração da Sessão", value=f"**{hms(dur_sec)}**", inline=False)
         e.set_thumbnail(url=str(itx.user.display_avatar.url))
         await itx.response.send_message(embed=e, ephemeral=True)
         
         lch = bot.get_channel(LOGS_CHANNEL)
         if lch:
-            le = discord.Embed(title="📤 Saída Registrada", color=0xE74C3C, timestamp=now)
-            le.add_field(name="Colaborador", value=f"{itx.user.mention}", inline=True)
+            le = discord.Embed(title="📤 Saída Registrada 💖", color=0xFF0000, timestamp=now)
+            le.add_field(name="Colaborador(a)", value=f"{itx.user.mention}", inline=True)
             le.add_field(name="Duração", value=f"**{hms(dur_sec)}**", inline=True)
             await lch.send(embed=le)
         asyncio.create_task(refresh_rank())
@@ -571,7 +566,7 @@ class RemoveHoursAmountModal(discord.ui.Modal):
     
     def __init__(self, target_user: discord.Member):
         title_name = target_user.display_name[:20]
-        super().__init__(title=f"Remover hrs de {title_name}")
+        super().__init__(title=f"Remover hrs de {title_name} 🎀")
         self.target_user = target_user
 
     async def on_submit(self, itx: discord.Interaction):
@@ -599,13 +594,13 @@ class RemoveHoursAmountModal(discord.ui.Modal):
             await db.execute("UPDATE sessions SET dur_sec = ?, close_time = ? WHERE id = ?", (nova_dur, nova_saida.isoformat(), session_id))
             msg = f"Sessão ajustada para {hms(nova_dur)}."
         await db.commit()
-        await itx.response.send_message(f"✅ Sucesso para {self.target_user.mention}: {msg}", ephemeral=True)
+        await itx.response.send_message(f"🌸 Sucesso para {self.target_user.mention}: {msg}", ephemeral=True)
         asyncio.create_task(refresh_rank(force=True))
 
 class RemoveHoursUserSelect(discord.ui.UserSelect):
     def __init__(self):
         super().__init__(
-            placeholder="👥 Selecione o membro para remover horas...",
+            placeholder="🎀 Selecione o membro para remover horas...",
             min_values=1, max_values=1, custom_id="select_user_remove_hours"
         )
         
@@ -625,7 +620,7 @@ class RecruitActionView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         
-    @discord.ui.button(label="✅ Aprovar", style=discord.ButtonStyle.success, custom_id="recruit_approve")
+    @discord.ui.button(label="🌸 Aprovar", style=discord.ButtonStyle.danger, custom_id="recruit_approve")
     async def btn_approve(self, itx: discord.Interaction, btn: discord.ui.Button):
         if not any(r.id in AUTHORIZED_REMOVE_ROLE_IDS for r in itx.user.roles) and not itx.user.guild_permissions.administrator:
             return await itx.response.send_message("❌ Sem permissão.", ephemeral=True)
@@ -642,13 +637,13 @@ class RecruitActionView(discord.ui.View):
                 except Exception as e:
                     logger.error(f"Erro ao dar cargos: {e}")
         
-        embed.color = 0x2ECC71
-        embed.title = "✅ Candidatura Aprovada"
-        embed.set_footer(text=f"Aprovado por {itx.user.display_name}")
+        embed.color = 0xFF69B4 # Rosa Sucesso
+        embed.title = "🌸 Candidatura Aprovada"
+        embed.set_footer(text=f"Aprovado por {itx.user.display_name} 🎀")
         
         for child in self.children: child.disabled = True
         await itx.message.edit(embed=embed, view=self)
-        await itx.response.send_message("✅ Candidato aprovado e cargos adicionados!", ephemeral=True)
+        await itx.response.send_message("🌸 Candidato(a) aprovado(a) e cargos adicionados!", ephemeral=True)
 
     @discord.ui.button(label="❌ Recusar", style=discord.ButtonStyle.danger, custom_id="recruit_deny")
     async def btn_deny(self, itx: discord.Interaction, btn: discord.ui.Button):
@@ -656,23 +651,23 @@ class RecruitActionView(discord.ui.View):
             return await itx.response.send_message("❌ Sem permissão.", ephemeral=True)
             
         embed = itx.message.embeds[0]
-        embed.color = 0xE74C3C
+        embed.color = 0xFF0000 # Vermelho
         embed.title = "❌ Candidatura Recusada"
-        embed.set_footer(text=f"Recusado por {itx.user.display_name}")
+        embed.set_footer(text=f"Recusado por {itx.user.display_name} 💔")
         
         for child in self.children: child.disabled = True
         await itx.message.edit(embed=embed, view=self)
         await itx.response.send_message("❌ Candidatura recusada.", ephemeral=True)
 
-class RecruitModal(discord.ui.Modal, title="📢 Formulário de Recrutamento"):
+class RecruitModal(discord.ui.Modal, title="📢 Formulário de Recrutamento 🎀"):
     mensagem = discord.ui.TextInput(label="Sua experiência e motivo", style=discord.TextStyle.paragraph, required=True, placeholder="Descreva sua experiência, disponibilidade...")
     
     async def on_submit(self, itx: discord.Interaction):
-        await itx.response.send_message("✅ Sua candidatura foi enviada e será analisada pela diretoria!", ephemeral=True)
+        await itx.response.send_message("🌸 Sua candidatura foi enviada e será analisada com muito amor pela diretoria!", ephemeral=True)
         log_channel = bot.get_channel(RECRUIT_LOGS_CHANNEL)
         if log_channel:
-            embed = discord.Embed(title="📄 Nova Candidatura Recebida", color=0xFFA500, timestamp=now_br())
-            embed.add_field(name="Candidato", value=f"{itx.user.mention} (`{itx.user.name}`)", inline=False)
+            embed = discord.Embed(title="📄 Nova Candidatura Recebida 🎀", color=0xFFB6C1, timestamp=now_br())
+            embed.add_field(name="Candidato(a)", value=f"{itx.user.mention} (`{itx.user.name}`)", inline=False)
             embed.add_field(name="Apresentação", value=self.mensagem.value, inline=False)
             embed.set_thumbnail(url=str(itx.user.display_avatar.url))
             
@@ -680,7 +675,7 @@ class RecruitModal(discord.ui.Modal, title="📢 Formulário de Recrutamento"):
 
 class RecruitView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="📢 Fazer Recrutamento", style=discord.ButtonStyle.primary, custom_id="recruit_button")
+    @discord.ui.button(label="📢 Fazer Recrutamento", style=discord.ButtonStyle.danger, custom_id="recruit_button")
     async def recruit_btn(self, itx: discord.Interaction, _: discord.ui.Button):
         await itx.response.send_modal(RecruitModal())
 
@@ -688,16 +683,16 @@ class DMNotifyView(discord.ui.View):
     def __init__(self, user_id: int):
         super().__init__(timeout=3600)
         self.user_id = user_id
-    @discord.ui.button(label="✅ Ainda em serviço", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="🌸 Ainda em serviço", style=discord.ButtonStyle.danger)
     async def confirm_btn(self, itx: discord.Interaction, _: discord.ui.Button):
-        if itx.user.id != self.user_id: return await itx.response.send_message("❌ Não é para você.", ephemeral=True)
-        await itx.response.send_message("👍 Confirmado!", ephemeral=True)
-    @discord.ui.button(label="🔴 Fechar Ponto", style=discord.ButtonStyle.danger)
+        if itx.user.id != self.user_id: return await itx.response.send_message("❌ Não é para você, anjo.", ephemeral=True)
+        await itx.response.send_message("💖 Confirmado, bom trabalho!", ephemeral=True)
+    @discord.ui.button(label="💖 Fechar Ponto", style=discord.ButtonStyle.danger)
     async def close_from_dm_btn(self, itx: discord.Interaction, _: discord.ui.Button):
         if itx.user.id != self.user_id: return
         uid, name, now = str(itx.user.id), itx.user.display_name, now_br()
         row = await db.fetchone("SELECT open_time FROM active WHERE user_id = ?", (uid,))
-        if not row: return await itx.response.send_message("⚠️ Sem ponto aberto.", ephemeral=True)
+        if not row: return await itx.response.send_message("⚠️ Sem ponto aberto flor.", ephemeral=True)
         
         open_dt = localize(datetime.datetime.fromisoformat(row[0]))
         dur = int((now - open_dt).total_seconds())
@@ -706,11 +701,11 @@ class DMNotifyView(discord.ui.View):
         await db.execute("INSERT INTO sessions (user_id, user_name, open_time, close_time, dur_sec, week_start) VALUES (?,?,?,?,?,?)", (uid, name, row[0], now.isoformat(), dur, ws))
         await db.execute("DELETE FROM active WHERE user_id = ?", (uid,))
         await db.commit()
-        await itx.response.send_message(f"🔴 Ponto Fechado! Duração: **{hms(dur)}**")
+        await itx.response.send_message(f"💖 Ponto Fechado! Duração do seu turno: **{hms(dur)}**")
         asyncio.create_task(refresh_rank())
 
 # ──────────────────────────────────────────────────────────────
-#  COMANDOS DA IA OTIMIZADOS
+# ✨ COMANDOS DA IA OTIMIZADOS
 # ──────────────────────────────────────────────────────────────
 async def fetch_gemini_fallback(contexto: str) -> str:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
@@ -729,8 +724,8 @@ def extract_topics(text: str) -> list:
     palavras = set(re.findall(r'\b[a-záéíóúâêôãõç]{4,}\b', text.lower()))
     return [p for p in palavras if p not in STOPWORDS_PTBR]
 
-@bot.tree.command(name="ia", description="Faça uma pergunta para a IA (com contexto do chat)")
-@app_commands.describe(pergunta="Sua pergunta")
+@bot.tree.command(name="ia", description="Faça uma pergunta para a IA do NORTH (com contexto do chat)")
+@app_commands.describe(pergunta="Sua perguntinha")
 async def cmd_ia(itx: discord.Interaction, pergunta: str):
     if not GEMINI_API_KEY or not GEMINI_MODELS:
         return await itx.response.send_message("❌ IA não configurada.", ephemeral=True)
@@ -742,7 +737,7 @@ async def cmd_ia(itx: discord.Interaction, pergunta: str):
         user_patterns = await get_user_patterns(str(itx.user.id))
         knowledge = await get_knowledge(pergunta)
 
-        contexto = "Você é um assistente virtual do Hospital ECCO em um servidor FiveM. Responda de forma educada e objetiva.\n\n"
+        contexto = "Você é um assistente virtual super fofo e educado do Hospital NORTH em um servidor FiveM. Responda de forma carinhosa e objetiva.\n\n"
         if user_patterns["total_interactions"] > 0 and user_patterns["topics"]:
             contexto += f"Tópicos frequentes do usuário: {', '.join(user_patterns['topics'][-5:])}\n\n"
         if channel_history:
@@ -767,9 +762,8 @@ async def cmd_ia(itx: discord.Interaction, pergunta: str):
             resposta_texto = await fetch_gemini_fallback(contexto)
 
         if not resposta_texto:
-            return await itx.followup.send("❌ Falha ao conectar com a IA no momento.")
+            return await itx.followup.send("❌ Falha ao conectar com a IA no momento, me perdoe!")
 
-        # 🔹 SUBSTITUI NOMES DE CANAIS POR MENÇÕES NA RESPOSTA
         resposta_texto = replace_channel_mentions(resposta_texto, itx.guild)
 
         conv_id = await save_conversation(str(itx.user.id), str(itx.channel_id), pergunta, resposta_texto)
@@ -777,7 +771,7 @@ async def cmd_ia(itx: discord.Interaction, pergunta: str):
             await update_user_pattern(str(itx.user.id), topico)
         await save_knowledge(pergunta, resposta_texto)
 
-        embed = discord.Embed(description=resposta_texto[:4000], color=0x00D4FF)
+        embed = discord.Embed(description=resposta_texto[:4000], color=0xFF69B4) # Rosa
         await itx.followup.send(embed=embed, view=RatingView(conv_id, None))
         
     except Exception as e:
@@ -797,7 +791,7 @@ async def on_message(msg: discord.Message):
             channel_history = await get_channel_history(str(msg.channel.id), limit=15)
             knowledge = await get_knowledge(msg.content)
             
-            contexto = "Você é um assistente virtual do Hospital ECCO em um servidor FiveM. Responda brevemente e objetivamente. Máx 400 caracteres.\n\n"
+            contexto = "Você é um assistente virtual fofo do Hospital NORTH em um servidor FiveM. Responda brevemente e objetivamente. Máx 400 caracteres.\n\n"
             if channel_history:
                 contexto += "\n".join([f"Msg: {entry[1]}\nBot: {entry[2]}\n" for entry in channel_history if entry[2]])
             if knowledge:
@@ -818,7 +812,6 @@ async def on_message(msg: discord.Message):
                 resposta_texto = await fetch_gemini_fallback(contexto)
 
             if resposta_texto:
-                # 🔹 SUBSTITUI NOMES DE CANAIS POR MENÇÕES NA RESPOSTA
                 resposta_texto = replace_channel_mentions(resposta_texto, msg.guild)
 
                 conv_id = await save_conversation(str(msg.author.id), str(msg.channel.id), msg.content, resposta_texto)
@@ -826,7 +819,7 @@ async def on_message(msg: discord.Message):
                     await update_user_pattern(str(msg.author.id), topico)
                 await save_knowledge(msg.content, resposta_texto)
 
-                embed = discord.Embed(description=resposta_texto[:1900], color=0x00D4FF)
+                embed = discord.Embed(description=resposta_texto[:1900], color=0xFF69B4) # Rosa
                 await msg.reply(embed=embed, view=RatingView(conv_id, None), mention_author=False)
 
         except Exception as e:
@@ -835,21 +828,21 @@ async def on_message(msg: discord.Message):
     await bot.process_commands(msg)
 
 # ──────────────────────────────────────────────────────────────
-#  COMANDOS DE BARRA
+# 🎀 COMANDOS DE BARRA
 # ──────────────────────────────────────────────────────────────
-@bot.tree.command(name="ativar_ia", description="[ADMIN] Ativa IA no canal")
+@bot.tree.command(name="ativar_ia", description="[ADMIN] Ativa IA no canal 🎀")
 @app_commands.default_permissions(administrator=True)
 async def cmd_ativar_ia(itx: discord.Interaction):
     await set_ia_enabled(str(itx.channel_id), True)
-    await itx.response.send_message("✅ IA Ativada.", ephemeral=True)
+    await itx.response.send_message("🌸 IA Ativada com sucesso.", ephemeral=True)
 
-@bot.tree.command(name="desativar_ia", description="[ADMIN] Desativa IA no canal")
+@bot.tree.command(name="desativar_ia", description="[ADMIN] Desativa IA no canal 💔")
 @app_commands.default_permissions(administrator=True)
 async def cmd_desativar_ia(itx: discord.Interaction):
     await set_ia_enabled(str(itx.channel_id), False)
     await itx.response.send_message("❌ IA Desativada.", ephemeral=True)
 
-@bot.tree.command(name="meu_ponto", description="Consulte suas horas desta semana")
+@bot.tree.command(name="meu_ponto", description="Consulte suas horas desta semana fofamente 💖")
 async def cmd_meu_ponto(itx: discord.Interaction):
     uid, ws = str(itx.user.id), week_monday(now_br()).isoformat()
     sessions = await db.fetchall("SELECT open_time, close_time, dur_sec FROM sessions WHERE user_id = ? AND week_start >= ? ORDER BY open_time DESC", (uid, ws))
@@ -860,41 +853,41 @@ async def cmd_meu_ponto(itx: discord.Interaction):
     if active:
         dt = localize(datetime.datetime.fromisoformat(active[0]))
         total += (now_br() - dt).total_seconds()
-        desc = f"🟢 **Em Serviço** desde `{dt.strftime('%H:%M:%S')}`\n\n"
+        desc = f"🌸 **Em Serviço** brilhando desde `{dt.strftime('%H:%M:%S')}`\n\n"
         
-    e = discord.Embed(title=f"📊 Meu Ponto", description=desc, color=0x1565C0)
-    e.add_field(name="⏱️ Total", value=f"**{hms(total)}**")
+    e = discord.Embed(title=f"📊 Meu Ponto 🎀", description=desc, color=0xFF69B4) # Rosa
+    e.add_field(name="⏱️ Total de Horas Lindas", value=f"**{hms(total)}**")
     await itx.response.send_message(embed=e, ephemeral=True)
 
-@bot.tree.command(name="lembrar", description="Define um lembrete para uma data/hora específica (DD/MM/AAAA HH:MM)")
+@bot.tree.command(name="lembrar", description="Define um lembrete para uma data/hora específica (DD/MM/AAAA HH:MM) 💌")
 @app_commands.describe(data_hora="Data e hora no formato DD/MM/AAAA HH:MM (ex: 25/12/2026 15:30)", mensagem="Mensagem do lembrete")
 async def cmd_lembrar(itx: discord.Interaction, data_hora: str, mensagem: str):
     try:
         remind_dt = datetime.datetime.strptime(data_hora, "%d/%m/%Y %H:%M")
         remind_dt = BR_TZ.localize(remind_dt)
     except ValueError:
-        return await itx.response.send_message("❌ Formato inválido. Use DD/MM/AAAA HH:MM (ex: 25/12/2026 15:30)", ephemeral=True)
+        return await itx.response.send_message("❌ Formato inválido anjo. Use DD/MM/AAAA HH:MM (ex: 25/12/2026 15:30)", ephemeral=True)
     
     now = now_br()
     if remind_dt <= now:
-        return await itx.response.send_message("❌ A data/hora deve ser no futuro.", ephemeral=True)
+        return await itx.response.send_message("❌ A data/hora precisa ser no futurozinho.", ephemeral=True)
     
     await db.execute(
         "INSERT INTO reminders (user_id, channel_id, message, remind_at) VALUES (?, ?, ?, ?)",
         (str(itx.user.id), str(itx.channel_id), mensagem, remind_dt.isoformat())
     )
     await db.commit()
-    await itx.response.send_message(f"✅ Lembrete definido para **{remind_dt.strftime('%d/%m/%Y às %H:%M')}**.\n**Mensagem:** {mensagem}", ephemeral=True)
+    await itx.response.send_message(f"🌸 Lembrete definido para **{remind_dt.strftime('%d/%m/%Y às %H:%M')}**.\n**Mensagem:** {mensagem}", ephemeral=True)
 
-@bot.tree.command(name="sync", description="[ADMIN] Sincroniza comandos")
+@bot.tree.command(name="sync", description="[ADMIN] Sincroniza comandos ⚙️")
 @app_commands.default_permissions(administrator=True)
 async def cmd_sync(itx: discord.Interaction):
     await itx.response.defer(ephemeral=True)
     synced = await bot.tree.sync()
-    await itx.followup.send(f"✅ Sincronizados: {len(synced)}", ephemeral=True)
+    await itx.followup.send(f"🌸 Sincronizados com amor: {len(synced)} comandos", ephemeral=True)
 
 # ──────────────────────────────────────────────────────────────
-#  TASKS RECORRENTES SECUNDÁRIAS
+# 🔄 TASKS RECORRENTES SECUNDÁRIAS
 # ──────────────────────────────────────────────────────────────
 @tasks.loop(minutes=5)
 async def auto_refresh():
@@ -907,7 +900,7 @@ async def notify_active_users():
         user = bot.get_user(int(uid))
         if not user: continue
         try:
-            embed = discord.Embed(title="⏰ Verificação de Ponto", description=f"Olá {uname}, você ainda está em serviço?", color=0x3498DB)
+            embed = discord.Embed(title="⏰ Verificação de Ponto 🎀", description=f"Oiii {uname}, você ainda está em serviço ou já foi descansar?", color=0xFFB6C1)
             await user.send(embed=embed, view=DMNotifyView(int(uid)))
         except discord.Forbidden:
             pass
@@ -915,7 +908,7 @@ async def notify_active_users():
             logger.error(f"Erro ao notificar usuário {uid}: {e}")
 
 # ──────────────────────────────────────────────────────────────
-#  ON READY
+# 🚀 ON READY
 # ──────────────────────────────────────────────────────────────
 @bot.event
 async def on_ready():
@@ -937,7 +930,7 @@ async def on_ready():
             if not mid:
                 msg = await ch.send(embed=emb_func(), view=view_cls())
                 await save_mid(key, msg.id)
-                logger.info(f"Painel {key} criado.")
+                logger.info(f"Painel {key} criado com sucesso.")
 
     await refresh_rank(force=True)
     auto_refresh.start()
@@ -951,7 +944,7 @@ async def on_ready():
     except Exception as exc:
         logger.error(f"Erro ao sincronizar comandos: {exc}")
 
-    logger.info(f"✅ {bot.user} online!")
+    logger.info(f"🌸 {bot.user} online e pronto para espalhar amor!")
 
 if __name__ == "__main__":
     if not TOKEN: raise SystemExit("❌ DISCORD_TOKEN ausente.")

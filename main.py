@@ -12,7 +12,6 @@ import datetime
 import os
 import time
 import re
-import warnings
 import json
 import logging
 from collections import defaultdict
@@ -35,30 +34,22 @@ logging.basicConfig(
 logger = logging.getLogger('NorthBot')
 
 # ──────────────────────────────────────────────────────────────
-# ✨ CONFIGURAÇÃO DA IA (GEMINI)
+# ✨ CONFIGURAÇÃO DA IA (NOVO SDK: GOOGLE GENAI)
 # ──────────────────────────────────────────────────────────────
-warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
-import google.generativeai as genai
+from google import genai
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODELS = []
+GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+gemini_client = None
 
 if GEMINI_API_KEY:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        available_models = []
-        for model in genai.list_models():
-            if "generateContent" in model.supported_generation_methods:
-                available_models.append(model.name)
-        GEMINI_MODELS = [m for m in available_models if "gemini" in m]
-        if not GEMINI_MODELS:
-            GEMINI_MODELS = ["models/gemini-1.5-flash", "models/gemini-1.0-pro", "models/gemini-pro"]
-        logger.info(f"Modelos Gemini disponíveis: {GEMINI_MODELS}")
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        logger.info(f"Cliente Gemini configurado! Modelos preferenciais: {GEMINI_MODELS}")
     except Exception as e:
         logger.error(f"Erro ao configurar Gemini: {e}")
-        GEMINI_MODELS = ["models/gemini-1.5-flash", "models/gemini-1.0-pro", "models/gemini-pro"]
 else:
-    logger.warning("Chave API Gemini não encontrada.")
+    logger.warning("Chave API Gemini não encontrada. A IA não funcionará.")
 
 # ──────────────────────────────────────────────────────────────
 # 🎀 CONFIGURAÇÃO DO BOT E CANAIS
@@ -708,7 +699,7 @@ class DMNotifyView(discord.ui.View):
 # ✨ COMANDOS DA IA OTIMIZADOS
 # ──────────────────────────────────────────────────────────────
 async def fetch_gemini_fallback(contexto: str) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": contexto}]}]}
     
     async with aiohttp.ClientSession() as session:
@@ -727,7 +718,7 @@ def extract_topics(text: str) -> list:
 @bot.tree.command(name="ia", description="Faça uma pergunta para a IA do NORTH (com contexto do chat)")
 @app_commands.describe(pergunta="Sua perguntinha")
 async def cmd_ia(itx: discord.Interaction, pergunta: str):
-    if not GEMINI_API_KEY or not GEMINI_MODELS:
+    if not gemini_client or not GEMINI_MODELS:
         return await itx.response.send_message("❌ IA não configurada.", ephemeral=True)
 
     await itx.response.defer(ephemeral=False)
@@ -750,8 +741,10 @@ async def cmd_ia(itx: discord.Interaction, pergunta: str):
         resposta_texto = None
         for modelo in GEMINI_MODELS:
             try:
-                model = genai.GenerativeModel(modelo)
-                resposta = await model.generate_content_async(contexto)
+                resposta = await gemini_client.aio.models.generate_content(
+                    model=modelo,
+                    contents=contexto
+                )
                 resposta_texto = resposta.text.strip()
                 break
             except Exception as e:
@@ -783,7 +776,7 @@ async def on_message(msg: discord.Message):
     if msg.author.bot or msg.content.startswith(("/", "!")):
         return await bot.process_commands(msg)
         
-    if not await is_ia_enabled(str(msg.channel.id)) or not GEMINI_API_KEY:
+    if not await is_ia_enabled(str(msg.channel.id)) or not gemini_client:
         return await bot.process_commands(msg)
 
     async with msg.channel.typing():
@@ -802,8 +795,10 @@ async def on_message(msg: discord.Message):
             resposta_texto = None
             for modelo in GEMINI_MODELS:
                 try:
-                    model = genai.GenerativeModel(modelo)
-                    resposta = await model.generate_content_async(contexto)
+                    resposta = await gemini_client.aio.models.generate_content(
+                        model=modelo,
+                        contents=contexto
+                    )
                     resposta_texto = resposta.text.strip()
                     break
                 except Exception: continue

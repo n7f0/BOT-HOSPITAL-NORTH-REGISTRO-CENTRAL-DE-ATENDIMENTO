@@ -3,7 +3,7 @@
 ║          🎀 NORTH HOSPITAL CENTER — ASSISTENTE VIRTUAL 🎀    ║
 ║        IA, SISTEMA DE SET E CONFIGURAÇÃO POR PAINEL DINÂMICO ║
 ║        COMANDOS: /painel_config /painel_set /ia              ║
-║        + /agendarconsulta /anuncio /central_atendimentos     ║
+║        + /agendarconsulta (painel) /anuncio /central_atendimentos ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -43,7 +43,7 @@ gemini_client = None
 if GEMINI_API_KEY:
     try:
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        logger.info(f"Cliente Gemini configurado com sucesso! 🎀")
+        logger.info("Cliente Gemini configurado com sucesso! 🎀")
     except Exception as e:
         logger.error(f"Erro ao configurar Gemini: {e}")
 else:
@@ -498,7 +498,7 @@ async def fetch_gemini_fallback(contexto: str) -> str:
     return None
 
 # ──────────────────────────────────────────────────────────────
-# 🏥 PAINEL DE AGENDAR CONSULTA
+# 🏥 PAINEL DE AGENDAR CONSULTA (com botão)
 # ──────────────────────────────────────────────────────────────
 APPOINTMENT_CATEGORY = 1511033527519678602  # ID da categoria para as consultas
 
@@ -549,9 +549,13 @@ class AppointmentModal(discord.ui.Modal, title="📅 Agendar Consulta"):
         # Cria o canal
         channel_name = f"consulta-{self.nome_completo.value.replace(' ', '-').lower()[:30]}"
         try:
+            category = itx.guild.get_channel(APPOINTMENT_CATEGORY)
+            if not category:
+                return await itx.response.send_message("❌ Categoria de agendamentos não encontrada. Verifique o ID.", ephemeral=True)
+
             channel = await itx.guild.create_text_channel(
                 name=channel_name,
-                category=itx.guild.get_channel(APPOINTMENT_CATEGORY),
+                category=category,
                 overwrites=overwrites,
                 reason=f"Agendamento de consulta para {self.nome_completo.value}"
             )
@@ -569,12 +573,25 @@ class AppointmentModal(discord.ui.Modal, title="📅 Agendar Consulta"):
         embed.set_footer(text=f"Solicitado por {itx.user.display_name}")
         await channel.send(content=mention, embed=embed)
 
-        # Adiciona um botão para fechar o canal (opcional)
+        # Adiciona um botão para fechar o canal
         close_view = discord.ui.View()
         close_view.add_item(CloseChannelButton(channel.id))
         await channel.send("🔒 **Para encerrar este atendimento, clique no botão abaixo.**", view=close_view)
 
         await itx.response.send_message(f"🌸 Consulta agendada! Um canal foi criado: {channel.mention}", ephemeral=True)
+
+# View com botão para abrir o modal de agendamento
+class AgendarConsultaButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="📅 Agendar Consulta", style=discord.ButtonStyle.danger, custom_id="agendar_consulta_btn")
+
+    async def callback(self, itx: discord.Interaction):
+        await itx.response.send_modal(AppointmentModal())
+
+class AgendarConsultaView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(AgendarConsultaButton())
 
 # ──────────────────────────────────────────────────────────────
 # 🏥 CENTRAL DE ATENDIMENTOS (5 ESPECIALIDADES)
@@ -862,13 +879,26 @@ async def cmd_lembrar(itx: discord.Interaction, data_hora: str, mensagem: str):
     await itx.response.send_message(f"🌸 Lembrete marcado para **{remind_dt.strftime('%d/%m/%Y às %H:%M')}**!", ephemeral=True)
 
 # ──────────────────────────────────────────────────────────────
-# 🆕 NOVOS COMANDOS: AGENDAR CONSULTA, ANÚNCIO, CENTRAL DE ATENDIMENTOS
+# 🆕 NOVOS COMANDOS: AGENDAR CONSULTA (PAINEL), ANÚNCIO, CENTRAL DE ATENDIMENTOS
 # ──────────────────────────────────────────────────────────────
-@bot.tree.command(name="agendarconsulta", description="Agende uma consulta e crie um canal privado para o atendimento 📅")
+@bot.tree.command(name="agendarconsulta", description="Envia o painel para agendar uma consulta 📅")
 async def cmd_agendarconsulta(itx: discord.Interaction):
-    # Verifica se o cargo de notificação está configurado? Apenas avisa se não.
-    # Abre o modal
-    await itx.response.send_modal(AppointmentModal())
+    """
+    Comando que envia um painel com botão para agendar consulta.
+    Ao clicar no botão, o usuário preenche o modal e um canal privado é criado.
+    """
+    embed = discord.Embed(
+        title="📅 Agendamento de Consultas - NORTH HOSPITAL",
+        description=(
+            "Para agendar uma consulta, clique no botão abaixo e preencha os dados solicitados.\n\n"
+            "Um canal privado será criado para você e para a equipe responsável, onde você poderá acompanhar o atendimento."
+        ),
+        color=0xFF69B4,
+        timestamp=now_br()
+    )
+    embed.set_footer(text="NORTH HOSPITAL - Cuidando de você com amor.")
+    view = AgendarConsultaView()
+    await itx.response.send_message(embed=embed, view=view)
 
 @bot.tree.command(name="anuncio", description="[ADMIN] Crie um anúncio bonitinho com menção de cargos 📢")
 @app_commands.default_permissions(administrator=True)
@@ -900,7 +930,8 @@ async def on_ready():
     bot.add_view(ConfigPanelView())
     bot.add_view(SetView())
     bot.add_view(SetActionView())
-    bot.add_view(CentralAtendimentosView())  # nova
+    bot.add_view(CentralAtendimentosView())
+    bot.add_view(AgendarConsultaView())  # nova view
 
     check_reminders.start()
     cleanup_database.start()

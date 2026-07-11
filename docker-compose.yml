@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  bot:
+    build: .
+    container_name: north-hospital-bot
+    restart: always
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DB_PATH=/app/data/north.db
+    volumes:
+      - db_data:/app/data
+
+volumes:
+  db_data:

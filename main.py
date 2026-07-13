@@ -10,6 +10,7 @@ import re
 import json
 import logging
 import datetime
+import asyncio
 import aiosqlite
 import discord
 import pytz
@@ -168,7 +169,7 @@ class ConfigPanelView(discord.ui.View):
         self.add_item(CategoryConfigSelect("ticket_category", "📁 Categoria p/ Tickets de Recrutamento/Exames"))
 
 # ──────────────────────────────────────────────────────────────
-# 📢 SISTEMA DE PAINEL SET (FORMULÁRIO EXATO E RENAME)
+# 📢 SISTEMA DE PAINEL SET
 # ──────────────────────────────────────────────────────────────
 class SetActionView(discord.ui.View):
     def __init__(self):
@@ -263,7 +264,7 @@ class SetView(discord.ui.View):
         await itx.response.send_modal(SetModal())
 
 # ──────────────────────────────────────────────────────────────
-# 💼 PAINEL DE RECRUTAMENTO (TRABALHE CONOSCO)
+# 💼 PAINEL DE RECRUTAMENTO (ENTREVISTA INTERATIVA)
 # ──────────────────────────────────────────────────────────────
 class RecrutamentoTicketView(discord.ui.View):
     def __init__(self, channel_id: int):
@@ -279,7 +280,7 @@ class RecrutamentoTicketView(discord.ui.View):
         
         await itx.response.send_message("✅ **Candidato Aprovado!** Favor continuar o processo (entrevista/avaliação psicológica) por aqui.")
         btn.disabled = True
-        self.children[1].disabled = True # desabilita reprovar
+        self.children[1].disabled = True
         await itx.message.edit(view=self)
 
     @discord.ui.button(label="❌ Reprovar Candidato", style=discord.ButtonStyle.danger, custom_id="rec_deny")
@@ -291,7 +292,7 @@ class RecrutamentoTicketView(discord.ui.View):
         
         await itx.response.send_message("❌ **Candidato Reprovado.** Infelizmente não seguiremos com o processo no momento.")
         btn.disabled = True
-        self.children[0].disabled = True # desabilita aprovar
+        self.children[0].disabled = True
         await itx.message.edit(view=self)
 
     @discord.ui.button(label="🔒 Fechar Ticket", style=discord.ButtonStyle.secondary, custom_id="rec_close")
@@ -302,22 +303,77 @@ class RecrutamentoTicketView(discord.ui.View):
             await discord.utils.sleep_until(now_br() + datetime.timedelta(seconds=5))
             await channel.delete()
 
-class RecrutamentoModal(discord.ui.Modal, title="📋 Formulário de Recrutamento"):
-    # Limite do Discord são 5 campos por Modal, então combinamos as informações inteligentemente:
-    campo1 = discord.ui.TextInput(label="Nome Completo e Idade", placeholder="Ex: João da Silva, 25 anos", required=True)
-    campo2 = discord.ui.TextInput(label="ID (Passaporte)", placeholder="Seu ID no servidor", style=discord.TextStyle.short, required=True)
-    campo3 = discord.ui.TextInput(label="Área de Interesse e se tem Experiência", placeholder="Ex: Enfermagem. Sim, já atuei na área.", required=True)
-    campo4 = discord.ui.TextInput(label="Disponibilidade de horário", placeholder="Ex: Todos os dias no período da noite", required=True)
-    campo5 = discord.ui.TextInput(label="Motivação e como lida com pressão?", placeholder="Por que deseja entrar? Como reage sob pressão?", style=discord.TextStyle.paragraph, required=True)
+async def run_interview(channel: discord.TextChannel, user: discord.Member):
+    perguntas = [
+        "1️⃣ **Nome Completo***\n*(Digite seu nome completo)*",
+        "2️⃣ **Idade***\n*(Digite sua idade)*",
+        "3️⃣ **ID***\n*(Digite o número do seu Passaporte no servidor)*",
+        "4️⃣ **Já tem experiência na área da saúde anteriormente?***\n*(Responda com Sim ou Não e detalhes se houver)*",
+        "5️⃣ **Área de Interesse***\n*(Ex: Clínica Geral, Enfermagem, Obstetrícia, Psicologia, Paramédico, Cirurgia, Pediatria)*",
+        "6️⃣ **Qual a sua disponibilidade de horário?***\n*(Ex: Todos os dias a noite, Seg a Sex a tarde, etc)*",
+        "7️⃣ **Porque deseja fazer parte da equipa do Hospital North?***\n*(Descreva sua motivação)*",
+        "8️⃣ **Como lida com situações de pressão e trabalho em equipa?***\n*(Seja sincero na sua resposta)*"
+    ]
 
-    async def on_submit(self, itx: discord.Interaction):
+    respostas = []
+
+    def check(m):
+        return m.author == user and m.channel == channel
+
+    await channel.send(f"Olá {user.mention}! Vamos começar o preenchimento do seu currículo. 📝\n\nPor favor, responda as perguntas abaixo uma a uma enviando a mensagem aqui no chat.\n*(Se você demorar mais de 10 minutos em uma pergunta, o formulário será cancelado)*")
+
+    for pergunta in perguntas:
+        await channel.send(pergunta)
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=600.0)
+            respostas.append(msg.content)
+        except asyncio.TimeoutError:
+            await channel.send("⏳ **Tempo esgotado!** Você demorou muito para responder. Este ticket será fechado.")
+            await asyncio.sleep(5)
+            await channel.delete()
+            return
+
+    # Limpando o canal ou apenas postando o embed (neste caso postamos no final para ficar visível)
+    embed = discord.Embed(title="📋 Formulário de Recrutamento Concluído", color=0x4169E1, timestamp=now_br())
+    embed.add_field(name="Nome Completo", value=respostas[0], inline=True)
+    embed.add_field(name="Idade", value=respostas[1], inline=True)
+    embed.add_field(name="ID (Passaporte)", value=respostas[2], inline=True)
+    embed.add_field(name="Tem experiência?", value=respostas[3], inline=True)
+    embed.add_field(name="Área de Interesse", value=respostas[4], inline=True)
+    embed.add_field(name="Disponibilidade", value=respostas[5], inline=True)
+    embed.add_field(name="Por que deseja entrar?", value=respostas[6], inline=False)
+    embed.add_field(name="Como lida com pressão e trabalho em equipe?", value=respostas[7], inline=False)
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_footer(text=f"Candidato: {user.name}")
+
+    # Renomeando o ticket
+    try:
+        nome_curto = respostas[0].split()[0].lower()
+        id_user = respostas[2].strip()
+        await channel.edit(name=f"recrutamento-{nome_curto}-{id_user}")
+    except:
+        pass
+
+    admin_roles = await get_config_roles("admin_roles")
+    admin_mentions = " ".join([f"<@&{r}>" for r in admin_roles])
+
+    await channel.send(
+        content=f"🔔 **Atenção Administração:** {admin_mentions}\nO candidato {user.mention} finalizou o preenchimento!", 
+        embed=embed, 
+        view=RecrutamentoTicketView(channel.id)
+    )
+
+class RecrutamentoView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    
+    @discord.ui.button(label="📝 Enviar Currículo", style=discord.ButtonStyle.primary, custom_id="rec_btn")
+    async def recrutamento_btn(self, itx: discord.Interaction, _: discord.ui.Button):
         await itx.response.defer(ephemeral=True)
-        
-        nome_curto = self.campo1.value.split()[0].lower()
-        id_user = self.campo2.value.strip()
-        channel_name = f"recrutamento-{nome_curto}-{id_user}"
 
+        channel_name = f"recrutamento-{itx.user.name.lower()}"
         admin_roles = await get_config_roles("admin_roles")
+        
         overwrites = {
             itx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             itx.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True)
@@ -332,33 +388,17 @@ class RecrutamentoModal(discord.ui.Modal, title="📋 Formulário de Recrutament
 
         try:
             channel = await itx.guild.create_text_channel(name=channel_name[:30], category=category, overwrites=overwrites)
+            await itx.followup.send(f"✅ Seu chat de recrutamento foi criado: {channel.mention}. Vá até lá e responda às perguntas!", ephemeral=True)
             
-            embed = discord.Embed(title="📋 Novo Formulário de Recrutamento", color=0x4169E1)
-            embed.add_field(name="Nome e Idade", value=self.campo1.value, inline=False)
-            embed.add_field(name="ID (Passaporte)", value=self.campo2.value, inline=False)
-            embed.add_field(name="Área de Interesse e Experiência", value=self.campo3.value, inline=False)
-            embed.add_field(name="Disponibilidade de Horário", value=self.campo4.value, inline=False)
-            embed.add_field(name="Motivação e Lidar com Pressão", value=self.campo5.value, inline=False)
-            
-            await channel.send(
-                content=f"Olá {itx.user.mention}! Seu formulário foi recebido. Aguarde a análise dos administradores.", 
-                embed=embed, 
-                view=RecrutamentoTicketView(channel.id)
-            )
-            await itx.followup.send(f"✅ Seu formulário foi enviado e o chat temporário foi criado: {channel.mention}", ephemeral=True)
+            # Inicia o loop de perguntas em segundo plano
+            bot.loop.create_task(run_interview(channel, itx.user))
         except Exception as e:
             logger.error(f"Erro ao criar chat de recrutamento: {e}")
-            await itx.followup.send("❌ Erro ao criar o chat. Verifique se o bot tem permissão.", ephemeral=True)
+            await itx.followup.send("❌ Erro ao criar o chat. Verifique as permissões do bot.", ephemeral=True)
 
-class RecrutamentoView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-    @discord.ui.button(label="📝 Enviar Currículo", style=discord.ButtonStyle.primary, custom_id="rec_btn")
-    async def recrutamento_btn(self, itx: discord.Interaction, _: discord.ui.Button):
-        await itx.response.send_modal(RecrutamentoModal())
 
 # ──────────────────────────────────────────────────────────────
-# 💉 SOLICITAÇÃO DE EXAMES (Antigo Agendamento de Consultas)
+# 💉 SOLICITAÇÃO DE EXAMES
 # ──────────────────────────────────────────────────────────────
 class ExamesModal(discord.ui.Modal, title="📅 Solicitação de Exames"):
     nome_completo = discord.ui.TextInput(label="Nome completo do paciente", style=discord.TextStyle.short, required=True)
@@ -401,7 +441,7 @@ class SolicitarExamesView(discord.ui.View):
         await itx.response.send_modal(ExamesModal())
 
 # ──────────────────────────────────────────────────────────────
-# 🏥 AGENDAR CONSULTA (Antiga Central de Atendimentos)
+# 🏥 AGENDAR CONSULTA
 # ──────────────────────────────────────────────────────────────
 SPECIALTIES = {
     "psicologia": {"emoji": "🧠", "label": "Psicologia"},
@@ -474,7 +514,7 @@ class CloseChannelButton(discord.ui.Button):
             await channel.delete()
 
 # ──────────────────────────────────────────────────────────────
-# 📢 PAINEL DE ANÚNCIO (Mantido)
+# 📢 PAINEL DE ANÚNCIO
 # ──────────────────────────────────────────────────────────────
 class AnnouncementModal(discord.ui.Modal, title="📢 Criar Anúncio"):
     titulo = discord.ui.TextInput(label="Título do anúncio", style=discord.TextStyle.short, required=True)

@@ -106,14 +106,6 @@ async def set_config_channel(key: str, channel_id: int):
     await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (key, str(channel_id)))
     await db.commit()
 
-async def get_config_int(key: str) -> int:
-    row = await db.fetchone("SELECT value FROM config WHERE key = ?", (key,))
-    return int(row[0]) if row and row[0] else None
-
-async def set_config_int(key: str, value: int):
-    await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (key, str(value)))
-    await db.commit()
-
 def extract_user_id(text: str) -> int:
     match = re.search(r'<@!?(\d+)>', text)
     if match: return int(match.group(1))
@@ -132,7 +124,7 @@ class RoleConfigSelect(discord.ui.RoleSelect):
 
     async def callback(self, itx: discord.Interaction):
         if not itx.user.guild_permissions.administrator:
-            return await itx.response.send_message("❌ Só administradores podem usar isso, anjo.", ephemeral=True)
+            return await itx.response.send_message("❌ Só administradores podem usar isso.", ephemeral=True)
         role_ids = [role.id for role in self.values]
         await set_config_roles(self.key, role_ids)
         await itx.response.send_message(f"🌸 Cargos salvos com muito sucesso!", ephemeral=True)
@@ -144,7 +136,7 @@ class ChannelConfigSelect(discord.ui.ChannelSelect):
 
     async def callback(self, itx: discord.Interaction):
         if not itx.user.guild_permissions.administrator:
-            return await itx.response.send_message("❌ Só administradores podem usar isso, anjo.", ephemeral=True)
+            return await itx.response.send_message("❌ Só administradores podem usar isso.", ephemeral=True)
         channel_id = self.values[0].id
         await set_config_channel(self.key, channel_id)
         await itx.response.send_message(f"🎀 Canal configurado perfeitamente!", ephemeral=True)
@@ -164,7 +156,7 @@ class ConfigPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(RoleConfigSelect("admin_roles", "👑 Selecione os Cargos Administrativos"))
-        self.add_item(RoleConfigSelect("approved_roles", "💖 Selecione os Cargos para Membros Setados"))
+        self.add_item(RoleConfigSelect("approved_roles", "💖 Selecione Cargos para Membros Setados"))
         self.add_item(ChannelConfigSelect("set_logs", "📄 Selecione o Canal para os Logs de Set"))
         self.add_item(CategoryConfigSelect("ticket_category", "📁 Categoria p/ Tickets de Recrutamento/Exames"))
 
@@ -181,7 +173,7 @@ class SetActionView(discord.ui.View):
         is_admin = itx.user.guild_permissions.administrator or any(r.id in admin_roles for r in itx.user.roles)
 
         if not is_admin:
-            return await itx.response.send_message("❌ Você não tem os cargos de permissão para isso flor.", ephemeral=True)
+            return await itx.response.send_message("❌ Você não tem os cargos de permissão para isso.", ephemeral=True)
 
         embed = itx.message.embeds[0]
         uid = extract_user_id(embed.fields[0].value)
@@ -192,15 +184,13 @@ class SetActionView(discord.ui.View):
             member = itx.guild.get_member(uid)
             if member:
                 try:
-                    # Entrega de Cargos
                     approved_role_ids = await get_config_roles("approved_roles")
                     roles_to_add = [itx.guild.get_role(r) for r in approved_role_ids if itx.guild.get_role(r)]
                     if roles_to_add: await member.add_roles(*roles_to_add)
                     
-                    # Alteração de Apelido (Muda para "Nome | ID")
                     await member.edit(nick=f"{nome} | {passaporte}")
                 except discord.Forbidden:
-                    logger.warning("Bot não tem permissão para alterar o apelido deste usuário (cargo superior).")
+                    logger.warning("Bot não tem permissão para alterar o apelido deste usuário.")
                 except Exception as e:
                     logger.error(f"Erro ao setar membro: {e}")
 
@@ -278,7 +268,7 @@ class RecrutamentoTicketView(discord.ui.View):
         if not is_admin:
             return await itx.response.send_message("❌ Você não tem permissão.", ephemeral=True)
         
-        await itx.response.send_message("✅ **Candidato Aprovado!** Favor continuar o processo (entrevista/avaliação psicológica) por aqui.")
+        await itx.response.send_message("✅ **Candidato Aprovado!** Favor continuar o processo por aqui.")
         btn.disabled = True
         self.children[1].disabled = True
         await itx.message.edit(view=self)
@@ -333,7 +323,6 @@ async def run_interview(channel: discord.TextChannel, user: discord.Member):
             await channel.delete()
             return
 
-    # Limpando o canal ou apenas postando o embed (neste caso postamos no final para ficar visível)
     embed = discord.Embed(title="📋 Formulário de Recrutamento Concluído", color=0x4169E1, timestamp=now_br())
     embed.add_field(name="Nome Completo", value=respostas[0], inline=True)
     embed.add_field(name="Idade", value=respostas[1], inline=True)
@@ -346,7 +335,6 @@ async def run_interview(channel: discord.TextChannel, user: discord.Member):
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.set_footer(text=f"Candidato: {user.name}")
 
-    # Renomeando o ticket
     try:
         nome_curto = respostas[0].split()[0].lower()
         id_user = respostas[2].strip()
@@ -389,13 +377,9 @@ class RecrutamentoView(discord.ui.View):
         try:
             channel = await itx.guild.create_text_channel(name=channel_name[:30], category=category, overwrites=overwrites)
             await itx.followup.send(f"✅ Seu chat de recrutamento foi criado: {channel.mention}. Vá até lá e responda às perguntas!", ephemeral=True)
-            
-            # Inicia o loop de perguntas em segundo plano
             bot.loop.create_task(run_interview(channel, itx.user))
         except Exception as e:
-            logger.error(f"Erro ao criar chat de recrutamento: {e}")
             await itx.followup.send("❌ Erro ao criar o chat. Verifique as permissões do bot.", ephemeral=True)
-
 
 # ──────────────────────────────────────────────────────────────
 # 💉 SOLICITAÇÃO DE EXAMES
@@ -441,14 +425,40 @@ class SolicitarExamesView(discord.ui.View):
         await itx.response.send_modal(ExamesModal())
 
 # ──────────────────────────────────────────────────────────────
-# 🏥 AGENDAR CONSULTA
+# 🏥 AGENDAR CONSULTA (Categorias e Cargos Individuais)
 # ──────────────────────────────────────────────────────────────
+# ⚠️ PARA MUDAR CATEGORIAS E CARGOS, ALTERE OS NÚMEROS AQUI:
 SPECIALTIES = {
-    "psicologia": {"emoji": "🧠", "label": "Psicologia"},
-    "obstetricia": {"emoji": "🤰", "label": "Obstetrícia"},
-    "pediatria": {"emoji": "👶", "label": "Pediatria"},
-    "cirurgia": {"emoji": "🔪", "label": "Cirurgia"},
-    "clinico_geral": {"emoji": "🩺", "label": "Clínico Geral"}
+    "psicologia": {
+        "emoji": "🧠", 
+        "label": "Psicologia",
+        "category_id": 1511033530636042472,
+        "role_id": 1511033526785675288
+    },
+    "obstetricia": {
+        "emoji": "🤰", 
+        "label": "Obstetrícia",
+        "category_id": 1511033530636042473,
+        "role_id": 1511033526785675286
+    },
+    "pediatria": {
+        "emoji": "👶", 
+        "label": "Pediatria",
+        "category_id": 1511033530636042474,
+        "role_id": 1511033526785675290
+    },
+    "cirurgia": {
+        "emoji": "🔪", 
+        "label": "Cirurgia",
+        "category_id": 1511033530636042475,
+        "role_id": 1511033526785675285
+    },
+    "clinico_geral": {
+        "emoji": "🩺", 
+        "label": "Clínico Geral",
+        "category_id": 1511033530636042476,
+        "role_id": 1511033526785675287
+    }
 }
 
 class PatientModal(discord.ui.Modal):
@@ -463,30 +473,44 @@ class PatientModal(discord.ui.Modal):
         await itx.response.defer(ephemeral=True)
         specialty = SPECIALTIES[self.specialty_key]
         
+        # Pega a categoria exata configurada para o botão
+        category = itx.guild.get_channel(specialty["category_id"])
+        
+        # Pega o cargo exato configurado para ser notificado e ver o ticket
+        role = itx.guild.get_role(specialty["role_id"])
+        
         overwrites = {
             itx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
             itx.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
         }
         
-        cat_id = await get_config_channel("ticket_category")
-        category = itx.guild.get_channel(cat_id) if cat_id else None
+        # Concede permissão de ver o canal temporário ao cargo específico da profissão
+        if role:
+            overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        
         channel_name = f"consulta-{self.specialty_key}-{self.nome_paciente.value.replace(' ', '-').lower()[:10]}"
 
         try:
             channel = await itx.guild.create_text_channel(name=channel_name, category=category, overwrites=overwrites)
+            
             embed = discord.Embed(
                 title=f"{specialty['emoji']} Consulta Agendada - {specialty['label']}",
                 description=f"**Paciente:** {self.nome_paciente.value}\n**Solicitado por:** {itx.user.mention}\n**Motivo:** {self.descricao.value or 'Não informado'}",
                 color=0xFF69B4,
                 timestamp=now_br()
             )
-            await channel.send(content=itx.user.mention, embed=embed)
+            
+            # Marca o paciente e o cargo médico responsável
+            mention_text = f"{itx.user.mention} {role.mention}" if role else itx.user.mention
+            await channel.send(content=mention_text, embed=embed)
+            
             close_view = discord.ui.View()
             close_view.add_item(CloseChannelButton(channel.id))
             await channel.send("🔒 **Para encerrar esta consulta, clique no botão abaixo.**", view=close_view)
-            await itx.followup.send(f"🌸 Consulta criada com sucesso! {channel.mention}", ephemeral=True)
+            
+            await itx.followup.send(f"🌸 Consulta criada com sucesso! Vá para: {channel.mention}", ephemeral=True)
         except Exception as e:
-            await itx.followup.send("❌ Erro ao criar o canal.", ephemeral=True)
+            await itx.followup.send("❌ Erro ao criar o canal. Verifique se as permissões e IDs estão corretos.", ephemeral=True)
 
 class AgendarConsultaMultiView(discord.ui.View):
     def __init__(self):
